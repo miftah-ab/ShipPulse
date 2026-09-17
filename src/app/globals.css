@@ -1,0 +1,249 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+
+  --color-sidebar: hsl(var(--sidebar));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-primary: hsl(var(--sidebar-primary));
+  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
+  --color-sidebar-accent: hsl(var(--sidebar-accent));
+  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
+  --color-sidebar-border: hsl(var(--sidebar-border));
+  --color-sidebar-ring: hsl(var(--sidebar-ring));
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+}
+
+@layer base {
+  :root {
+    /* ShipPulse Design Tokens */
+    --sp-ink:           #0B0D12;
+    --sp-indigo:        #635BFF;
+    --sp-indigo-light:  #7C75FF;
+    --sp-indigo-dark:   #4A43E8;
+    --sp-fg:            #F7F8FA;
+    --sp-muted:         #9CA3AF;
+    --sp-border-light:  #E5E7EB;
+    --sp-border-dark:   #1F2937;
+    --sp-success:       #22C55E;
+    --sp-warning:       #F59E0B;
+    --sp-error:         #EF4444;
+    --sp-bg-light:      #F8FAFC;
+
+    /* shadcn/ui tokens mapped to ShipPulse */
+    --background:        0 0% 100%;
+    --foreground:        220 17% 7%;
+    --card:              0 0% 100%;
+    --card-foreground:   220 17% 7%;
+    --popover:           0 0% 100%;
+    --popover-foreground:220 17% 7%;
+    --primary:           244 100% 67%;
+    --primary-foreground:0 0% 100%;
+    --secondary:         220 14% 96%;
+    --secondary-foreground:220 17% 7%;
+    --muted:             220 14% 96%;
+    --muted-foreground:  220 9% 62%;
+    --accent:            244 100% 97%;
+    --accent-foreground: 244 100% 67%;
+    --destructive:       0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border:            220 13% 91%;
+    --input:             220 13% 91%;
+    --ring:              244 100% 67%;
+    --radius:            0.625rem;
+
+    /* Chart colors */
+    --chart-1: 244 100% 67%;
+    --chart-2: 142 71% 45%;
+    --chart-3: 38 92% 50%;
+    --chart-4: 221 83% 53%;
+    --chart-5: 0 84% 60%;
+
+    /* Sidebar */
+    --sidebar:            220 17% 7%;
+    --sidebar-foreground: 0 0% 97%;
+    --sidebar-primary:    244 100% 67%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent:     220 13% 15%;
+    --sidebar-accent-foreground: 0 0% 97%;
+    --sidebar-border:     220 13% 18%;
+    --sidebar-ring:       244 100% 67%;
+  }
+
+  .dark {
+    --background:        220 17% 7%;
+    --foreground:        210 20% 98%;
+    --card:              220 17% 10%;
+    --card-foreground:   210 20% 98%;
+    --popover:           220 17% 10%;
+    --popover-foreground:210 20% 98%;
+    --primary:           244 100% 67%;
+    --primary-foreground:0 0% 100%;
+    --secondary:         220 13% 15%;
+    --secondary-foreground:210 20% 98%;
+    --muted:             220 13% 15%;
+    --muted-foreground:  220 9% 62%;
+    --accent:            220 13% 15%;
+    --accent-foreground: 244 100% 67%;
+    --destructive:       0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border:            220 13% 18%;
+    --input:             220 13% 18%;
+    --ring:              244 100% 67%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Smooth focus rings */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+
+  /* Accessible reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground));
+  }
+}
+
+@layer components {
+  /* Dashboard sidebar */
+  .sidebar-nav-item {
+    @apply flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-sidebar-foreground/70
+           transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring;
+  }
+
+  .sidebar-nav-item.active {
+    @apply bg-sidebar-accent text-sidebar-accent-foreground;
+  }
+
+  /* Category badge */
+  .category-badge {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold;
+  }
+
+  /* Release status badge */
+  .status-published  { @apply bg-green-500/10 text-green-600 dark:text-green-400; }
+  .status-draft      { @apply bg-yellow-500/10 text-yellow-600 dark:text-yellow-400; }
+  .status-generated  { @apply bg-blue-500/10 text-blue-600 dark:text-blue-400; }
+  .status-scheduled  { @apply bg-purple-500/10 text-purple-600 dark:text-purple-400; }
+  .status-archived   { @apply bg-gray-500/10 text-gray-500; }
+  .status-in_review  { @apply bg-orange-500/10 text-orange-600 dark:text-orange-400; }
+
+  /* Skeleton loading */
+  .skeleton {
+    @apply animate-pulse rounded-md bg-muted;
+  }
+
+  /* Code blocks */
+  .prose code {
+    @apply rounded bg-muted px-1.5 py-0.5 font-mono text-sm;
+  }
+
+  .prose pre {
+    @apply rounded-lg bg-[#0B0D12] p-4 overflow-x-auto;
+  }
+
+  .prose pre code {
+    @apply bg-transparent p-0 text-[#F7F8FA];
+  }
+}
+
+@layer utilities {
+  /* Gradient text */
+  .gradient-text {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-[#635BFF] to-[#9B8FFF];
+  }
+
+  /* Glass effect (used sparingly per brand guidelines) */
+  .glass {
+    @apply bg-white/80 backdrop-blur-sm dark:bg-[#0B0D12]/80;
+  }
+
+  /* Glow effect for primary CTA */
+  .glow-indigo {
+    box-shadow: 0 0 0 1px rgba(99, 91, 255, 0.2), 0 4px 24px rgba(99, 91, 255, 0.15);
+  }
+
+  /* Animation utilities */
+  .animate-in-up {
+    animation: slideInUp 0.3s ease-out;
+  }
+
+  @keyframes slideInUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .animate-in-fade {
+    animation: fadeIn 0.2s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+}
