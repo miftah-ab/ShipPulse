@@ -1,7 +1,7 @@
-import { MetadataRoute } from 'next'
+﻿import { MetadataRoute } from 'next'
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://shippulse.vercel.app'
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://ship-pulse.vercel.app'
 
   return [
     {

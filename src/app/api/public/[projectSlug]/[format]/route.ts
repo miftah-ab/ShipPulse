@@ -38,7 +38,7 @@ export async function GET(
     .order('published_at', { ascending: false })
     .limit(50)
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://shippulse.vercel.app'
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://ship-pulse.vercel.app'
   const changelogUrl = `${appUrl}/${project.slug}`
   const feedUrl = `${appUrl}/${project.slug}/${format}`
 

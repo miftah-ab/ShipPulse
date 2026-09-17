@@ -114,7 +114,7 @@ export function validateDomain(domain: string): { valid: boolean; reason?: strin
     return { valid: false, reason: 'Please enter a valid domain (e.g. updates.yourcompany.com).' }
   }
 
-  if (withoutProtocol.endsWith('.vercel.app') || withoutProtocol.endsWith('.shippulse.vercel.app')) {
+  if (withoutProtocol.endsWith('.vercel.app') || withoutProtocol.endsWith('.ship-pulse.vercel.app')) {
     return { valid: false, reason: 'Cannot use Vercel preview domains as custom domains.' }
   }
 

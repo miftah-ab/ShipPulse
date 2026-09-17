@@ -108,7 +108,7 @@ export function generateAtomFeed(config: FeedConfig): string {
   <link rel="alternate" href="${escapeXML(url)}"/>
   <link rel="self" href="${escapeXML(feedUrl)}"/>
   <updated>${new Date().toISOString()}</updated>
-  <generator uri="https://shippulse.vercel.app">ShipPulse</generator>
+  <generator uri="https://ship-pulse.vercel.app">ShipPulse</generator>
   ${entriesXML}
 </feed>`
 }

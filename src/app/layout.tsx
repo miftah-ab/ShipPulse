@@ -17,7 +17,10 @@ export const metadata: Metadata = {
   },
   description:
     'AI-powered product communication platform. Turn GitHub activity into clear release notes, host a public changelog, and keep users in the loop automatically.',
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? 'https://shippulse.vercel.app'),
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://ship-pulse.vercel.app')
+  ),
   keywords: [
     'changelog', 'release notes', 'product updates', 'GitHub integration',
     'AI changelog', 'product communication', 'widget', 'subscriber notifications',
@@ -27,7 +30,9 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     locale: 'en_US',
-    url: process.env.NEXT_PUBLIC_APP_URL ?? 'https://shippulse.vercel.app',
+    url:
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://ship-pulse.vercel.app'),
     siteName: 'ShipPulse',
     title: 'ShipPulse  -  Ship it. Explain it. Keep users in the loop.',
     description:

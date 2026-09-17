@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // ShipPulse  -  Next.js Middleware
 // Session refresh, protected route enforcement
 // ============================================================
@@ -84,7 +84,7 @@ export async function middleware(request: NextRequest) {
     'Content-Security-Policy',
     [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://shippulse.vercel.app",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://ship-pulse.vercel.app",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com",
       "img-src 'self' data: blob: https:",

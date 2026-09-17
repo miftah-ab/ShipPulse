@@ -1,4 +1,4 @@
-<div align="center">
+﻿<div align="center">
 
 # ShipPulse
 
@@ -16,7 +16,7 @@ Turn raw code commits into polished release notes, host high-converting changelo
 
 <br />
 
-[Live Demo](https://shippulse.vercel.app) • [Documentation](https://shippulse.vercel.app/docs) • [Report Bug](https://github.com/miftah-ab/ShipPulse/issues) • [Request Feature](https://github.com/miftah-ab/ShipPulse/issues)
+[Live Demo](https://ship-pulse.vercel.app) • [Documentation](https://ship-pulse.vercel.app/docs) • [Report Bug](https://github.com/miftah-ab/ShipPulse/issues) • [Request Feature](https://github.com/miftah-ab/ShipPulse/issues)
 
 </div>
 

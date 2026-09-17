@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Send confirmation email
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://shippulse.vercel.app'
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://ship-pulse.vercel.app'
   const confirmUrl = `${appUrl}/api/public/confirm?token=${subscriber.confirm_token}`
   const unsubscribeUrl = `${appUrl}/api/public/unsubscribe?token=${subscriber.confirm_token}`
 

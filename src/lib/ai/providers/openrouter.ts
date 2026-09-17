@@ -45,7 +45,7 @@ export class OpenRouterProvider implements AIProvider {
       headers: {
         'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': process.env.OPENROUTER_SITE_URL ?? 'https://shippulse.vercel.app',
+        'HTTP-Referer': process.env.OPENROUTER_SITE_URL ?? 'https://ship-pulse.vercel.app',
         'X-Title': process.env.OPENROUTER_SITE_NAME ?? 'ShipPulse',
       },
       body: JSON.stringify(body),

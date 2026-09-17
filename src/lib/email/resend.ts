@@ -17,7 +17,7 @@ function getResend(): Resend {
   return _resend
 }
 
-const FROM = process.env.RESEND_FROM_EMAIL ?? 'updates@shippulse.vercel.app'
+const FROM = process.env.RESEND_FROM_EMAIL ?? 'updates@ship-pulse.vercel.app'
 const FROM_NAME = process.env.RESEND_FROM_NAME ?? 'ShipPulse'
 
 export class EmailNotConfiguredError extends Error {
@@ -59,7 +59,7 @@ export async function sendSubscriberConfirmation(options: {
     <a href="${options.unsubscribeUrl}" style="color: #9CA3AF;">Unsubscribe</a>
   </p>
   <p style="color: #9CA3AF; font-size: 12px; border-top: 1px solid #E5E7EB; padding-top: 16px; margin-top: 24px;">
-    Sent by <a href="https://shippulse.vercel.app" style="color: #635BFF;">ShipPulse</a>
+    Sent by <a href="https://ship-pulse.vercel.app" style="color: #635BFF;">ShipPulse</a>
   </p>
 </body>
 </html>`,
