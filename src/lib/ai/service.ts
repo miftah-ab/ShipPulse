@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // ShipPulse  -  AI Service Abstraction
 // AIService → GroqProvider | OpenRouterProvider
 // Never call providers directly from application code.
@@ -10,7 +10,10 @@ import type {
   AIProvider,
   AIProviderResult,
   AIUsageRecord,
+  ProjectAIConfig,
+  OutputMode,
 } from './types'
+import type { CommitSummary, PRSummary, TagSummary } from '../github/types'
 import { GroqProvider } from './providers/groq'
 import { OpenRouterProvider } from './providers/openrouter'
 import { sanitizeRepositoryContent } from './security'

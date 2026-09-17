@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // ShipPulse  -  Rate Limiter
 // Server-side rate limiting for all sensitive endpoints
 // ============================================================
@@ -25,7 +25,7 @@ interface RateLimitResult {
  * as a performance optimization  -  the DB approach is correct for $0 budget.
  */
 export async function checkRateLimit(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   config: RateLimitConfig
 ): Promise<RateLimitResult> {
   const { identifier, endpoint, limitPerMinute } = config
@@ -58,7 +58,7 @@ export async function checkRateLimit(
   }
 
   // Record this request
-  await supabase
+  await (supabase as any)
     .from('shippulse_rate_limit_log')
     .insert({
       identifier,

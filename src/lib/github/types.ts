@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // ShipPulse  -  GitHub Types
 // ============================================================
 
@@ -75,4 +75,30 @@ export interface GitHubWebhookEvent {
   eventType: 'push' | 'pull_request' | 'release' | 'create' | string
   payload: Record<string, unknown>
   signature: string
+}
+
+export interface CommitSummary {
+  sha: string
+  message: string
+  author?: string
+  date?: string
+  changedFiles?: number
+  additions?: number
+  deletions?: number
+}
+
+export interface PRSummary {
+  number: number
+  title: string
+  body?: string | null
+  author?: string
+  labels?: string[]
+  mergedAt?: string | null
+}
+
+export interface TagSummary {
+  name: string
+  sha?: string
+  date?: string
+  message?: string
 }
