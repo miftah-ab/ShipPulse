@@ -1,5 +1,5 @@
-// ============================================================
-// ShipPulse — RSS / Atom Feed Generator
+﻿// ============================================================
+// ShipPulse  -  RSS / Atom Feed Generator
 // Valid RSS 2.0 and Atom 1.0 feeds for public changelogs
 // ============================================================
 

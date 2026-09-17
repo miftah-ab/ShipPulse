@@ -1,5 +1,5 @@
--- ============================================================
--- ShipPulse — Migration 002: Row Level Security Policies
+﻿-- ============================================================
+-- ShipPulse  -  Migration 002: Row Level Security Policies
 -- ALL policies enforce strict workspace-tenant isolation
 -- ============================================================
 
@@ -83,7 +83,7 @@ ALTER TABLE public.shippulse_user_sessions              ENABLE ROW LEVEL SECURIT
 ALTER TABLE public.shippulse_rate_limit_log             ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================
--- shippulse_users — users see/edit only their own row
+-- shippulse_users  -  users see/edit only their own row
 -- ============================================================
 CREATE POLICY "sp_users_select_own" ON public.shippulse_users
   FOR SELECT USING (id = auth.uid());
@@ -95,7 +95,7 @@ CREATE POLICY "sp_users_update_own" ON public.shippulse_users
   FOR UPDATE USING (id = auth.uid()) WITH CHECK (id = auth.uid());
 
 -- ============================================================
--- shippulse_workspaces — members can read; only owner/admin can update
+-- shippulse_workspaces  -  members can read; only owner/admin can update
 -- ============================================================
 CREATE POLICY "sp_workspaces_select" ON public.shippulse_workspaces
   FOR SELECT USING (id IN (SELECT shippulse_my_workspace_ids()));
@@ -207,7 +207,7 @@ CREATE POLICY "sp_domains_delete" ON public.shippulse_domains
   );
 
 -- ============================================================
--- shippulse_repositories — workspace-scoped
+-- shippulse_repositories  -  workspace-scoped
 -- ============================================================
 CREATE POLICY "sp_repos_select" ON public.shippulse_repositories
   FOR SELECT USING (
@@ -253,7 +253,7 @@ CREATE POLICY "sp_repo_conn_delete" ON public.shippulse_repository_connections
   );
 
 -- ============================================================
--- shippulse_github_tokens — only workspace owner/admin can read
+-- shippulse_github_tokens  -  only workspace owner/admin can read
 -- ============================================================
 CREATE POLICY "sp_github_tokens_select" ON public.shippulse_github_tokens
   FOR SELECT USING (shippulse_is_admin(workspace_id));
@@ -268,7 +268,7 @@ CREATE POLICY "sp_github_tokens_delete" ON public.shippulse_github_tokens
   FOR DELETE USING (shippulse_is_admin(workspace_id));
 
 -- ============================================================
--- shippulse_commits / pull_requests / tags — workspace-scoped via repo
+-- shippulse_commits / pull_requests / tags  -  workspace-scoped via repo
 -- ============================================================
 CREATE POLICY "sp_commits_select" ON public.shippulse_commits
   FOR SELECT USING (
@@ -319,7 +319,7 @@ CREATE POLICY "sp_tags_insert" ON public.shippulse_tags
   );
 
 -- ============================================================
--- shippulse_categories — public read, no user insert
+-- shippulse_categories  -  public read, no user insert
 -- ============================================================
 CREATE POLICY "sp_categories_select_all" ON public.shippulse_categories
   FOR SELECT USING (true);
@@ -462,7 +462,7 @@ CREATE POLICY "sp_sync_jobs_update" ON public.shippulse_sync_jobs
   FOR UPDATE USING (workspace_id IN (SELECT shippulse_my_workspace_ids()));
 
 -- ============================================================
--- shippulse_webhook_events_incoming — service role only in prod
+-- shippulse_webhook_events_incoming  -  service role only in prod
 -- ============================================================
 CREATE POLICY "sp_wh_in_select" ON public.shippulse_webhook_events_incoming
   FOR SELECT USING (
@@ -644,7 +644,7 @@ CREATE POLICY "sp_feedback_comments_insert_anon" ON public.shippulse_feedback_co
   FOR INSERT WITH CHECK (true);
 
 -- ============================================================
--- shippulse_subscribers — project owners see; no public email exposure
+-- shippulse_subscribers  -  project owners see; no public email exposure
 -- ============================================================
 CREATE POLICY "sp_subscribers_select" ON public.shippulse_subscribers
   FOR SELECT USING (
@@ -708,7 +708,7 @@ CREATE POLICY "sp_api_keys_update" ON public.shippulse_api_keys
   FOR UPDATE USING (shippulse_is_admin(workspace_id));
 
 -- ============================================================
--- shippulse_audit_logs — read only for admins
+-- shippulse_audit_logs  -  read only for admins
 -- ============================================================
 CREATE POLICY "sp_audit_logs_select" ON public.shippulse_audit_logs
   FOR SELECT USING (
@@ -790,6 +790,6 @@ CREATE POLICY "sp_user_sessions_delete" ON public.shippulse_user_sessions
   FOR DELETE USING (user_id = auth.uid());
 
 -- ============================================================
--- shippulse_rate_limit_log — service role only
+-- shippulse_rate_limit_log  -  service role only
 -- ============================================================
 -- No user-facing policies; accessed via service role in API routes only

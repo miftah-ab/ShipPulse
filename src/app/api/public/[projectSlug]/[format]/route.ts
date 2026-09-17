@@ -1,7 +1,7 @@
-// ============================================================
-// GET /[projectSlug]/feed.xml  — RSS 2.0
-// GET /[projectSlug]/atom.xml  — Atom 1.0
-// Public changelog feeds — auto-updated on publish
+﻿// ============================================================
+// GET /[projectSlug]/feed.xml   -  RSS 2.0
+// GET /[projectSlug]/atom.xml   -  Atom 1.0
+// Public changelog feeds  -  auto-updated on publish
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server'

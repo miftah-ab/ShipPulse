@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+﻿import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { Toaster } from '@/components/ui/toaster'
@@ -11,7 +11,7 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: 'ShipPulse — Ship it. Explain it. Keep users in the loop.',
+    default: 'ShipPulse  -  Ship it. Explain it. Keep users in the loop.',
     template: '%s | ShipPulse',
   },
   description:
@@ -28,7 +28,7 @@ export const metadata: Metadata = {
     locale: 'en_US',
     url: process.env.NEXT_PUBLIC_APP_URL ?? 'https://shippulse.vercel.app',
     siteName: 'ShipPulse',
-    title: 'ShipPulse — Ship it. Explain it. Keep users in the loop.',
+    title: 'ShipPulse  -  Ship it. Explain it. Keep users in the loop.',
     description:
       'Turn what you shipped into updates people actually understand. GitHub → AI release notes → public changelog → embeddable widget.',
     images: [
@@ -42,7 +42,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'ShipPulse — Ship it. Explain it. Keep users in the loop.',
+    title: 'ShipPulse  -  Ship it. Explain it. Keep users in the loop.',
     description:
       'Turn what you shipped into updates people actually understand.',
     images: ['/og-image.png'],

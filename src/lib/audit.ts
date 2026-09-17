@@ -1,5 +1,5 @@
-// ============================================================
-// ShipPulse — Audit Logger
+﻿// ============================================================
+// ShipPulse  -  Audit Logger
 // Records all important actions server-side
 // ============================================================
 
@@ -56,8 +56,8 @@ export interface AuditLogEntry {
 
 /**
  * Record an audit log entry.
- * Uses service role — never fails silently in production.
- * Does not throw — audit logging failure must not disrupt the main operation.
+ * Uses service role  -  never fails silently in production.
+ * Does not throw  -  audit logging failure must not disrupt the main operation.
  */
 export async function auditLog(entry: AuditLogEntry): Promise<void> {
   try {
@@ -74,7 +74,7 @@ export async function auditLog(entry: AuditLogEntry): Promise<void> {
       user_agent: entry.userAgent ?? null,
     })
   } catch (err) {
-    // Log to console but never throw — audit failure must not break the app
+    // Log to console but never throw  -  audit failure must not break the app
     console.error('[AuditLog] Failed to write audit entry:', {
       action: entry.action,
       error: err instanceof Error ? err.message : String(err),

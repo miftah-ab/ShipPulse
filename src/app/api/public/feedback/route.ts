@@ -1,6 +1,6 @@
-// ============================================================
+﻿// ============================================================
 // POST /api/public/feedback
-// Submit feedback on a release — rate limited, spam-resistant
+// Submit feedback on a release  -  rate limited, spam-resistant
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
     .digest('hex')
     .slice(0, 16)
 
-  // Basic spam detection — prevent duplicate helpful/not_helpful from same visitor
+  // Basic spam detection  -  prevent duplicate helpful/not_helpful from same visitor
   if (type === 'helpful' || type === 'not_helpful') {
     const { count } = await supabase
       .from('shippulse_feedback')

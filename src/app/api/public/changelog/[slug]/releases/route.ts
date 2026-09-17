@@ -1,7 +1,7 @@
-// ============================================================
+﻿// ============================================================
 // GET  /api/public/changelog/[slug]/releases
 // GET  /api/public/changelog/[slug]/releases/[releaseSlug]
-// Public, unauthenticated — only returns published releases
+// Public, unauthenticated  -  only returns published releases
 // on public projects. Rate limited.
 // ============================================================
 
@@ -30,7 +30,7 @@ export async function GET(
     })
   }
 
-  // Lookup project — must be public and not private
+  // Lookup project  -  must be public and not private
   const { data: project, error: projectError } = await supabase
     .from('shippulse_projects')
     .select(`
@@ -129,7 +129,7 @@ export async function GET(
 }
 
 function hashVisitor(identifier: string): string {
-  // Simple hash for analytics — no PII stored
+  // Simple hash for analytics  -  no PII stored
   const { createHash } = require('crypto')
   return createHash('sha256').update(identifier + process.env.APP_SECRET).digest('hex').slice(0, 16)
 }

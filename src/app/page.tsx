@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import React, { useState } from 'react'
 import Link from 'next/link'
@@ -198,7 +198,7 @@ export default function LandingPage() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <span className="text-lg font-bold text-white">v2.4.0 — Flexible Seat Billing & Edge Reliability</span>
+                    <span className="text-lg font-bold text-white">v2.4.0  -  Flexible Seat Billing & Edge Reliability</span>
                     <Badge variant="feature">New Features</Badge>
                     <Badge variant="fix">Bug Fixes</Badge>
                   </div>

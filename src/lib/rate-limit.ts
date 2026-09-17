@@ -1,5 +1,5 @@
-// ============================================================
-// ShipPulse — Rate Limiter
+﻿// ============================================================
+// ShipPulse  -  Rate Limiter
 // Server-side rate limiting for all sensitive endpoints
 // ============================================================
 
@@ -22,7 +22,7 @@ interface RateLimitResult {
  * Check rate limit using the database.
  * Uses a sliding 60-second window.
  * For production, consider using an in-memory store (Redis/Upstash)
- * as a performance optimization — the DB approach is correct for $0 budget.
+ * as a performance optimization  -  the DB approach is correct for $0 budget.
  */
 export async function checkRateLimit(
   supabase: ReturnType<typeof createClient>,
@@ -41,7 +41,7 @@ export async function checkRateLimit(
     .gte('created_at', windowStart.toISOString())
 
   if (error) {
-    // Fail open if DB error — log and allow
+    // Fail open if DB error  -  log and allow
     console.error('[RateLimit] DB error:', error.message)
     return { allowed: true, remaining: limitPerMinute, resetAt }
   }

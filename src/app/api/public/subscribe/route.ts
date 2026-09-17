@@ -1,6 +1,6 @@
-// ============================================================
+﻿// ============================================================
 // POST /api/public/subscribe
-// Subscribe to a project's changelog — rate limited, confirmation required
+// Subscribe to a project's changelog  -  rate limited, confirmation required
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
     .digest('hex')
     .slice(0, 16)
 
-  // Upsert subscriber (idempotent — same email same project = update)
+  // Upsert subscriber (idempotent  -  same email same project = update)
   const { data: subscriber, error } = await supabase
     .from('shippulse_subscribers')
     .upsert(
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to process subscription' }, { status: 500 })
   }
 
-  // Already confirmed — don't resend
+  // Already confirmed  -  don't resend
   if (subscriber.confirmed_at) {
     return NextResponse.json({ status: 'already_subscribed' })
   }
@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (emailErr) {
     if (emailErr instanceof Error && emailErr.name === 'EmailNotConfiguredError') {
-      // Email not configured — auto-confirm in development
+      // Email not configured  -  auto-confirm in development
       if (process.env.NODE_ENV === 'development') {
         await supabase
           .from('shippulse_subscribers')

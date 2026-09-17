@@ -1,6 +1,6 @@
-// ============================================================
+﻿// ============================================================
 // GET /api/health
-// Internal health check — does NOT expose sensitive info
+// Internal health check  -  does NOT expose sensitive info
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server'

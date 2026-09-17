@@ -1,5 +1,5 @@
-// ============================================================
-// ShipPulse — Outgoing Webhook Delivery Service
+﻿// ============================================================
+// ShipPulse  -  Outgoing Webhook Delivery Service
 // Signs payloads with HMAC-SHA256, handles retries
 // ============================================================
 

@@ -1,5 +1,5 @@
-// ============================================================
-// ShipPulse — Supabase Server Client
+﻿// ============================================================
+// ShipPulse  -  Supabase Server Client
 // ============================================================
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
@@ -22,7 +22,7 @@ export async function createClient() {
               cookieStore.set(name, value, options)
             )
           } catch {
-            // Called from Server Component — middleware handles refresh
+            // Called from Server Component  -  middleware handles refresh
           }
         },
       },
@@ -31,7 +31,7 @@ export async function createClient() {
 }
 
 /**
- * Server client with SERVICE ROLE — bypasses RLS.
+ * Server client with SERVICE ROLE  -  bypasses RLS.
  * Use ONLY in server-side API routes that have already
  * performed their own authorization checks.
  * NEVER use this in client components or public routes.

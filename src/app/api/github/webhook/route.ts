@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // POST /api/github/webhook
 // Receives GitHub webhook events, validates signature,
 // enforces idempotency, triggers sync
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     .maybeSingle()
 
   if (existing) {
-    // Already processed (or duplicate) — acknowledge but do nothing
+    // Already processed (or duplicate)  -  acknowledge but do nothing
     return NextResponse.json({ status: 'already_processed' }, { status: 200 })
   }
 
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
 
   // ── Validate HMAC signature ───────────────────────────────
   if (!webhookSecret) {
-    // Log and reject — never accept unsigned webhooks
+    // Log and reject  -  never accept unsigned webhooks
     console.error('[Webhook] No webhook secret configured for repo:', repoId)
     return NextResponse.json({ error: 'Webhook not configured' }, { status: 400 })
   }

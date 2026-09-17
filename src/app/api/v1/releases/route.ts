@@ -1,7 +1,7 @@
-// ============================================================
-// GET  /api/v1/releases         — list releases
-// POST /api/v1/releases         — create release
-// Public REST API — requires API key authentication
+﻿// ============================================================
+// GET  /api/v1/releases          -  list releases
+// POST /api/v1/releases          -  create release
+// Public REST API  -  requires API key authentication
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server'

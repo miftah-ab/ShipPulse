@@ -1,5 +1,5 @@
-// ============================================================
-// ShipPulse — API Key Management
+﻿// ============================================================
+// ShipPulse  -  API Key Management
 // Hashed storage, show-once pattern, validation
 // ============================================================
 
@@ -28,7 +28,7 @@ export function generateApiKey(): {
 
 /**
  * Hash an API key for storage.
- * Uses SHA-256 — fast lookup, one-way.
+ * Uses SHA-256  -  fast lookup, one-way.
  */
 export function hashApiKey(rawKey: string): string {
   return createHash('sha256').update(rawKey).digest('hex')

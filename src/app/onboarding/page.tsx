@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import React, { useState } from 'react'
 import Link from 'next/link'
@@ -350,7 +350,7 @@ export default function OnboardingPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
-                <h4 className="text-sm font-bold text-white">v1.0.0 — Launch of {formData.projectName || 'New Service'}</h4>
+                <h4 className="text-sm font-bold text-white">v1.0.0  -  Launch of {formData.projectName || 'New Service'}</h4>
                 <p className="text-xs text-slate-300 leading-relaxed">
                   We are excited to unveil our core platform features, enhanced performance optimizations, and full API integration.
                 </p>

@@ -1,5 +1,5 @@
-// ============================================================
-// ShipPulse — Supabase Client (Browser)
+﻿// ============================================================
+// ShipPulse  -  Supabase Client (Browser)
 // ============================================================
 import { createBrowserClient } from '@supabase/ssr'
 import type { Database } from './database.types'

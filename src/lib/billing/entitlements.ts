@@ -1,6 +1,6 @@
-// ============================================================
-// ShipPulse — Entitlement System
-// Plan-based feature enforcement — always server-side.
+﻿// ============================================================
+// ShipPulse  -  Entitlement System
+// Plan-based feature enforcement  -  always server-side.
 // Never trust client-side plan checks.
 // ============================================================
 

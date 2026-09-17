@@ -1,5 +1,5 @@
-// ============================================================
-// ShipPulse — OpenRouter Provider (Fallback)
+﻿// ============================================================
+// ShipPulse  -  OpenRouter Provider (Fallback)
 // ============================================================
 
 import type { AIGenerateRequest, AIProvider, AIProviderResult } from '../types'

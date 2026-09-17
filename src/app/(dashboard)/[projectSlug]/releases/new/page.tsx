@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import React, { useState } from 'react'
 import Link from 'next/link'
@@ -66,7 +66,7 @@ We're excited to introduce flexible team seat billing and volume tiers.
     setTimeout(() => {
       setIsAiProcessing(false)
       if (tone === 'executive') {
-        setContent(`## Executive Brief — Release ${version}
+        setContent(`## Executive Brief  -  Release ${version}
 This update activates dynamic enterprise seat billing, projected to eliminate manual invoicing overhead while strengthening webhook reliability across distributed edge locations.`)
       } else if (tone === 'bulleted') {
         setContent(`## Highlights (${version})

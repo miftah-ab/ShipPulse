@@ -1,5 +1,5 @@
-// ============================================================
-// ShipPulse — Next.js Middleware
+﻿// ============================================================
+// ShipPulse  -  Next.js Middleware
 // Session refresh, protected route enforcement
 // ============================================================
 
@@ -79,7 +79,7 @@ export async function middleware(request: NextRequest) {
   supabaseResponse.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
   supabaseResponse.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
 
-  // CSP — tightened, allows widget script
+  // CSP  -  tightened, allows widget script
   supabaseResponse.headers.set(
     'Content-Security-Policy',
     [

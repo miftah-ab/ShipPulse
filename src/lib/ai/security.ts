@@ -1,5 +1,5 @@
-// ============================================================
-// ShipPulse — AI Security: Prompt Injection Protection
+﻿// ============================================================
+// ShipPulse  -  AI Security: Prompt Injection Protection
 // Repository content is UNTRUSTED DATA. This module sanitizes
 // it before it reaches any AI prompt.
 // ============================================================
@@ -30,7 +30,7 @@ const INJECTION_PATTERNS = [
  * Sanitize repository content (commit messages, PR descriptions, etc.)
  * that will be included in AI requests as DATA (not instructions).
  *
- * This does NOT strip meaningful content — it flags and neutralizes
+ * This does NOT strip meaningful content  -  it flags and neutralizes
  * known prompt injection patterns, then wraps the content to signal
  * to the AI that it is data, not instructions.
  */
@@ -72,7 +72,7 @@ export function sanitizeCommitMessage(message: string): string {
 }
 
 /**
- * Sanitize a PR body — longer content, more risk.
+ * Sanitize a PR body  -  longer content, more risk.
  * Strictly truncate and filter.
  */
 export function sanitizePRBody(body: string | null | undefined): string {
