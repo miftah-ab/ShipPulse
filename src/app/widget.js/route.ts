@@ -12,7 +12,8 @@ export async function GET() {
   if (window.ShipPulse) return;
 
   var currentScript = document.currentScript || document.querySelector('script[data-project]');
-  var projectSlug = currentScript ? currentScript.getAttribute('data-project') : 'demo';
+  var projectSlug = currentScript ? currentScript.getAttribute('data-project') : '';
+  if (!projectSlug) return;
   var hostOrigin = currentScript ? new URL(currentScript.src).origin : window.location.origin;
 
   var host = document.createElement('div');

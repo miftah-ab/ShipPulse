@@ -23,6 +23,18 @@ export default function IntegrationsPage() {
   const projectSlug = (params?.projectSlug as string) || 'demo'
   const [isSyncing, setIsSyncing] = useState(false)
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
+  const [connectedRepo, setConnectedRepo] = useState('acme/dashboard')
+  const [connectedBranch, setConnectedBranch] = useState('main')
+  const [showPickerModal, setShowPickerModal] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [repos, setRepos] = useState<any[]>([])
+
+  React.useEffect(() => {
+    fetch('/api/github/repos')
+      .then((res) => res.json())
+      .then((d) => setRepos(d.repositories || []))
+      .catch(() => {})
+  }, [])
 
   const triggerManualSync = () => {
     setIsSyncing(true)
@@ -57,16 +69,26 @@ export default function IntegrationsPage() {
             </CardDescription>
           </div>
 
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={triggerManualSync}
-            disabled={isSyncing}
-            className="flex items-center gap-1.5 h-8 text-xs"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin text-indigo-400' : ''}`} />
-            <span>{isSyncing ? 'Ingesting commits...' : 'Sync Now'}</span>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowPickerModal(true)}
+              className="text-xs h-8 border-slate-750"
+            >
+              Change Repository
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={triggerManualSync}
+              disabled={isSyncing}
+              className="flex items-center gap-1.5 h-8 text-xs"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin text-indigo-400' : ''}`} />
+              <span>{isSyncing ? 'Ingesting commits...' : 'Sync Now'}</span>
+            </Button>
+          </div>
         </CardHeader>
 
         <CardContent className="space-y-4">
@@ -80,11 +102,11 @@ export default function IntegrationsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
             <div className="p-3 rounded-lg bg-slate-950 border border-slate-800">
               <p className="text-slate-500 text-[11px]">Repository</p>
-              <p className="text-white font-mono font-semibold mt-0.5">acme/dashboard</p>
+              <p className="text-white font-mono font-semibold mt-0.5">{connectedRepo}</p>
             </div>
             <div className="p-3 rounded-lg bg-slate-950 border border-slate-800">
               <p className="text-slate-500 text-[11px]">Watched Branch</p>
-              <p className="text-white font-mono font-semibold mt-0.5">main</p>
+              <p className="text-white font-mono font-semibold mt-0.5">{connectedBranch}</p>
             </div>
             <div className="p-3 rounded-lg bg-slate-950 border border-slate-800">
               <p className="text-slate-500 text-[11px]">Last Sync</p>
@@ -93,6 +115,69 @@ export default function IntegrationsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Repository Picker Modal */}
+      {showPickerModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <Card className="w-full max-w-lg border-slate-800 bg-slate-900 shadow-2xl">
+            <CardHeader className="pb-3 flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-base">Import / Switch Git Repository</CardTitle>
+                <CardDescription className="text-xs text-slate-400 mt-0.5">
+                  Select a connected repository to synchronize changelogs.
+                </CardDescription>
+              </div>
+              <button onClick={() => setShowPickerModal(false)} className="text-slate-500 hover:text-white">✕</button>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Input
+                placeholder="Search repositories..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="bg-slate-950 border-slate-800 text-xs"
+              />
+
+              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                {repos
+                  .filter((r) => !searchQuery || r.fullName.toLowerCase().includes(searchQuery.toLowerCase()))
+                  .map((repo) => (
+                    <div
+                      key={repo.id}
+                      className="p-3 rounded-xl border border-slate-800 bg-slate-950/60 hover:border-slate-700 flex items-center justify-between gap-2"
+                    >
+                      <div className="overflow-hidden">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-xs text-white truncate">{repo.fullName}</span>
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${
+                            repo.isPrivate ? 'bg-amber-500/10 text-amber-400' : 'bg-emerald-500/10 text-emerald-400'
+                          }`}>
+                            {repo.isPrivate ? 'Private' : 'Public'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 truncate">{repo.description}</p>
+                      </div>
+
+                      <Button
+                        size="sm"
+                        variant={connectedRepo === repo.fullName ? 'secondary' : 'glow'}
+                        onClick={() => {
+                          setConnectedRepo(repo.fullName)
+                          setConnectedBranch(repo.defaultBranch || 'main')
+                          setShowPickerModal(false)
+                          setSyncMessage(`Connected repository switched to ${repo.fullName}!`)
+                          setTimeout(() => setSyncMessage(null), 3000)
+                        }}
+                        className="h-7 text-xs shrink-0"
+                      >
+                        {connectedRepo === repo.fullName ? 'Active' : 'Import'}
+                      </Button>
+                    </div>
+                  ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Broadcast Channels */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

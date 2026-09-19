@@ -6,6 +6,7 @@ import { Sparkles, Mail, ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { sanitizeErrorMessage } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 
 export default function LoginPage() {
@@ -28,7 +29,7 @@ export default function LoginPage() {
       })
       if (error) throw error
     } catch (err: any) {
-      setError(err.message || 'Failed to initialize GitHub authentication')
+      setError(sanitizeErrorMessage(err, 'Failed to initialize GitHub authentication. Please try again.'))
       setLoading(false)
     }
   }
@@ -49,7 +50,7 @@ export default function LoginPage() {
       if (error) throw error
       setSentMagicLink(true)
     } catch (err: any) {
-      setError(err.message || 'Failed to send magic link')
+      setError(sanitizeErrorMessage(err, 'Failed to send magic link. Please check your email address and try again.'))
     } finally {
       setLoading(false)
     }

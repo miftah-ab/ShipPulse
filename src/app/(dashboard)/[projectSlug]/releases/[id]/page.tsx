@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import {
@@ -12,36 +12,31 @@ import {
   GitBranch,
   Wand2,
   CheckCircle2,
-  Layers,
-  FileText,
-  Mail,
   Radio,
-  Tag
+  Trash2
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 
-export default function NewReleasePage() {
+export default function EditReleasePage() {
   const params = useParams()
   const router = useRouter()
   const projectSlug = (params?.projectSlug as string) || 'demo'
+  const releaseId = (params?.id as string) || ''
 
-  const [version, setVersion] = useState('v2.5.0')
-  const [title, setTitle] = useState('Dynamic Team Seat Billing & Automated Invoicing')
+  const [version, setVersion] = useState('v2.4.0')
+  const [title, setTitle] = useState('Automated Team Seat Billing & Edge Reliability')
   const [content, setContent] = useState(`## Overview
-We're excited to introduce flexible team seat billing and volume tiers.
+Dynamic team seat scaling and latency drops across edge verifications.
 
-### What's New
-- **On-the-fly Seat Allocation:** Team administrators can invite new engineers instantly without interrupting active subscriptions.
-- **Prorated Invoicing:** Mid-cycle adjustments are calculated automatically at billing cycle completion.
-
-### Improvements & Fixes
-- Fixed race condition in webhook verification pipeline.
-- Database query latency dropped by 34% using connection pooling.
+### Shipped Items
+- **Team Seat Scaling:** Administrators can provision seats on demand without service interruption.
+- **Edge HMAC Verification:** Webhook listeners verify SHA-256 signatures in under 12ms globally.
+- **PostgreSQL Connection Pooling:** Stabilized database query latency by 34%.
 `)
-  const [selectedCategories, setSelectedCategories] = useState<string[]>(['feature', 'fix'])
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(['feature', 'perf'])
   const [isAiProcessing, setIsAiProcessing] = useState(false)
   const [previewMode, setPreviewMode] = useState(false)
   const [savedStatus, setSavedStatus] = useState<string | null>(null)
@@ -60,46 +55,65 @@ We're excited to introduce flexible team seat billing and volume tiers.
     )
   }
 
-  // AI Tone adjustment actions
   const applyAiTone = (tone: string) => {
     setIsAiProcessing(true)
     setTimeout(() => {
       setIsAiProcessing(false)
       if (tone === 'executive') {
-        setContent(`## Executive Brief  -  Release ${version}
-This update activates dynamic enterprise seat billing, projected to eliminate manual invoicing overhead while strengthening webhook reliability across distributed edge locations.`)
+        setContent(`## Executive Summary  -  ${version}\nThis deployment activates automated license allocation with zero manual overhead, backed by global SHA-256 edge verification.`)
       } else if (tone === 'bulleted') {
-        setContent(`## Highlights (${version})
-* Added dynamic license allocation for enterprise seats
-* Automated mid-month prorated invoice line items
-* Hardened edge webhook listener against replay attacks
-* Benchmarked 34% faster database round-trips`)
+        setContent(`## Release Highlights (${version})\n* Dynamic seat billing with instant pro-rating\n* 12ms edge webhook signature validation\n* 34% faster database read operations`)
       } else if (tone === 'widget') {
-        setContent(`Introducing dynamic seat billing and lightning-fast webhook reconciliation. Team admins can now scale seats with automated prorating.`)
+        setContent(`Seat billing is now automated! Provision seats seamlessly with improved query speeds.`)
       }
-    }, 1200)
+    }, 1000)
   }
 
-  const handleSaveDraft = async () => {
+  const [loading, setLoading] = useState(true)
+
+  React.useEffect(() => {
+    if (!releaseId) return
+    async function loadRelease() {
+      try {
+        const res = await fetch(`/api/dashboard/releases/${releaseId}`)
+        if (res.ok) {
+          const data = await res.json()
+          if (data.release) {
+            if (data.release.title) setTitle(data.release.title)
+            if (data.release.version) setVersion(data.release.version)
+            if (data.release.content) setContent(data.release.content)
+            if (data.release.tags && Array.isArray(data.release.tags)) {
+              setSelectedCategories(data.release.tags)
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Failed to load release:', e)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadRelease()
+  }, [releaseId])
+
+  const handleSave = async () => {
     try {
       setSavedStatus('Saving...')
-      const res = await fetch('/api/dashboard/releases', {
-        method: 'POST',
+      const res = await fetch(`/api/dashboard/releases/${releaseId}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          projectSlug,
           title,
           version,
           content,
-          status: 'draft',
           tags: selectedCategories,
         }),
       })
-      if (!res.ok) throw new Error('Failed to save draft')
-      setSavedStatus('Draft saved!')
+      if (!res.ok) throw new Error('Failed to save')
+      setSavedStatus('Changes saved!')
       setTimeout(() => setSavedStatus(null), 2500)
     } catch (err: any) {
-      setSavedStatus('Error saving draft')
+      setSavedStatus('Error saving changes')
       setTimeout(() => setSavedStatus(null), 3000)
     }
   }
@@ -107,11 +121,10 @@ This update activates dynamic enterprise seat billing, projected to eliminate ma
   const handlePublish = async () => {
     try {
       setSavedStatus('Publishing...')
-      const res = await fetch('/api/dashboard/releases', {
-        method: 'POST',
+      const res = await fetch(`/api/dashboard/releases/${releaseId}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          projectSlug,
           title,
           version,
           content,
@@ -120,19 +133,18 @@ This update activates dynamic enterprise seat billing, projected to eliminate ma
         }),
       })
       if (!res.ok) throw new Error('Failed to publish')
-      setSavedStatus('Published to changelog & widget!')
+      setSavedStatus('Published live!')
       setTimeout(() => {
         router.push(`/${projectSlug}/releases`)
       }, 1000)
     } catch (err: any) {
-      setSavedStatus('Error publishing release')
+      setSavedStatus('Error publishing')
       setTimeout(() => setSavedStatus(null), 3000)
     }
   }
 
   return (
     <div className="space-y-6">
-      {/* Top action bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
         <div className="flex items-center gap-3">
           <Link href={`/${projectSlug}/releases`}>
@@ -142,7 +154,7 @@ This update activates dynamic enterprise seat billing, projected to eliminate ma
             </Button>
           </Link>
           <span className="text-slate-600">/</span>
-          <span className="text-xs font-semibold text-slate-300">Draft Release</span>
+          <span className="text-xs font-semibold text-slate-300">Edit Release</span>
         </div>
 
         <div className="flex items-center gap-2">
@@ -165,7 +177,7 @@ This update activates dynamic enterprise seat billing, projected to eliminate ma
           <Button
             variant="secondary"
             size="sm"
-            onClick={handleSaveDraft}
+            onClick={handleSave}
             className="h-8 text-xs"
           >
             <Save className="h-3.5 w-3.5 mr-1.5 text-slate-400" />
@@ -179,13 +191,12 @@ This update activates dynamic enterprise seat billing, projected to eliminate ma
             className="h-8 text-xs font-semibold"
           >
             <Send className="h-3.5 w-3.5 mr-1.5" />
-            Publish Release
+            Publish
           </Button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Editor Main Column */}
         <div className="lg:col-span-2 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
@@ -193,7 +204,6 @@ This update activates dynamic enterprise seat billing, projected to eliminate ma
               <Input
                 value={version}
                 onChange={(e) => setVersion(e.target.value)}
-                placeholder="e.g. v2.5.0"
                 className="font-mono text-xs"
               />
             </div>
@@ -202,13 +212,11 @@ This update activates dynamic enterprise seat billing, projected to eliminate ma
               <Input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Dynamic Team Seat Billing"
                 className="text-xs"
               />
             </div>
           </div>
 
-          {/* Categories Selector */}
           <div>
             <label className="text-xs font-medium text-slate-400 block mb-1.5">Categories & Tags</label>
             <div className="flex flex-wrap gap-2">
@@ -233,7 +241,6 @@ This update activates dynamic enterprise seat billing, projected to eliminate ma
             </div>
           </div>
 
-          {/* Content Area / Markdown */}
           <div>
             <label className="text-xs font-medium text-slate-400 block mb-1.5">Release Notes (Markdown)</label>
             {previewMode ? (
@@ -249,15 +256,12 @@ This update activates dynamic enterprise seat billing, projected to eliminate ma
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 className="w-full p-4 rounded-xl border border-slate-750 bg-slate-900/90 text-slate-200 font-mono text-xs leading-relaxed focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
-                placeholder="Write markdown release notes or use the AI Assist tools on the right..."
               />
             )}
           </div>
         </div>
 
-        {/* AI & Git Sources Sidebar */}
         <div className="space-y-4">
-          {/* AI Assist Box */}
           <Card className="border-indigo-500/30 bg-slate-900/80 backdrop-blur-xl">
             <CardContent className="p-5 space-y-4">
               <div className="flex items-center gap-2">
@@ -307,7 +311,6 @@ This update activates dynamic enterprise seat billing, projected to eliminate ma
             </CardContent>
           </Card>
 
-          {/* Linked Sources Box */}
           <Card className="border-slate-800 bg-slate-900/50">
             <CardContent className="p-5 space-y-3">
               <div className="flex items-center justify-between">

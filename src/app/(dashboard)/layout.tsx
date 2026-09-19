@@ -24,8 +24,21 @@ import { Button } from '@/components/ui/button'
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const params = useParams()
-  const projectSlug = (params?.projectSlug as string) || 'demo'
+  const projectSlug = (params?.projectSlug as string) || ''
   const [projectMenuOpen, setProjectMenuOpen] = useState(false)
+  const [userProjects, setUserProjects] = useState<any[]>([])
+
+  React.useEffect(() => {
+    // Fetch real projects for the current user/workspace
+    fetch('/api/projects')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.projects?.length) {
+          setUserProjects(d.projects)
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   const navItems = [
     { name: 'Releases', href: `/${projectSlug}/releases`, icon: Layers },
@@ -74,16 +87,28 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {projectMenuOpen && (
               <div className="absolute top-18 left-4 right-4 z-50 rounded-xl border border-slate-800 bg-slate-900 p-2 shadow-2xl space-y-1">
                 <div className="px-2 py-1 text-[10px] uppercase font-semibold text-slate-500">Switch Project</div>
-                <button
-                  onClick={() => setProjectMenuOpen(false)}
-                  className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs hover:bg-slate-800 flex items-center justify-between text-white"
-                >
-                  <span>{projectSlug}</span>
-                  <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                </button>
+                {userProjects.length > 0 ? (
+                  userProjects.map((p) => (
+                    <Link
+                      key={p.id}
+                      href={`/${p.slug}/releases`}
+                      onClick={() => setProjectMenuOpen(false)}
+                      className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs hover:bg-slate-800 flex items-center justify-between ${
+                        p.slug === projectSlug ? 'text-indigo-400 font-semibold bg-slate-800/60' : 'text-slate-300'
+                      }`}
+                    >
+                      <span className="truncate">{p.name || p.slug}</span>
+                      {p.slug === projectSlug && <span className="h-2 w-2 rounded-full bg-emerald-400" />}
+                    </Link>
+                  ))
+                ) : (
+                  <div className="px-2.5 py-1.5 text-xs text-slate-400 font-medium">
+                    {projectSlug || 'Active Project'}
+                  </div>
+                )}
                 <Link
                   href="/onboarding"
-                  className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs hover:bg-slate-800 flex items-center gap-1.5 text-indigo-400"
+                  className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs hover:bg-slate-800 flex items-center gap-1.5 text-indigo-400 mt-1 pt-2 border-t border-slate-800/80"
                 >
                   <Plus className="h-3.5 w-3.5" />
                   <span>Create new project</span>

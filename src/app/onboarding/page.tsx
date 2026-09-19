@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import React, { useState } from 'react'
 import Link from 'next/link'
@@ -16,7 +16,8 @@ import {
   ArrowLeft,
   Copy,
   Check,
-  Code
+  Code,
+  Search
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -39,6 +40,30 @@ export default function OnboardingPage() {
     repoBranch: 'main',
     syncStatus: 'idle', // 'idle' | 'syncing' | 'completed'
   })
+
+  // GitHub Repositories for Step 3 Import Picker
+  const [repos, setRepos] = useState<any[]>([])
+  const [repoSearch, setRepoSearch] = useState('')
+  const [loadingRepos, setLoadingRepos] = useState(false)
+
+  const fetchRepos = React.useCallback(async () => {
+    try {
+      setLoadingRepos(true)
+      const res = await fetch('/api/github/repos')
+      if (res.ok) {
+        const data = await res.json()
+        setRepos(data.repositories || [])
+      }
+    } catch {
+      // Keep defaults
+    } finally {
+      setLoadingRepos(false)
+    }
+  }, [])
+
+  React.useEffect(() => {
+    fetchRepos()
+  }, [fetchRepos])
 
   // Step 1: Workspace setup
   const handleWorkspaceSubmit = (e: React.FormEvent) => {
@@ -89,8 +114,42 @@ export default function OnboardingPage() {
     setTimeout(() => setCopiedCode(false), 2000)
   }
 
-  const completeOnboarding = () => {
-    router.push(`/${formData.projectSlug || 'demo'}/releases`)
+  const [isProvisioning, setIsProvisioning] = useState(false)
+
+  const completeOnboarding = async () => {
+    try {
+      setIsProvisioning(true)
+      const res = await fetch('/api/onboarding/provision', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workspaceName: formData.workspaceName || 'My Workspace',
+          workspaceSlug: formData.workspaceSlug,
+          projectName: formData.projectName || 'My Project',
+          projectSlug: formData.projectSlug,
+          repoUrl: formData.repoUrl,
+          repoBranch: formData.repoBranch,
+        }),
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        if (data.project?.slug) {
+          router.push(`/${data.project.slug}/releases`)
+          return
+        }
+      }
+    } catch (e) {
+      console.error('Provisioning error:', e)
+    } finally {
+      setIsProvisioning(false)
+    }
+
+    if (formData.projectSlug) {
+      router.push(`/${formData.projectSlug}/releases`)
+    } else {
+      router.push('/dashboard')
+    }
   }
 
   const steps = [
@@ -252,48 +311,125 @@ export default function OnboardingPage() {
           </Card>
         )}
 
-        {/* STEP 3: CONNECT GITHUB REPOSITORY */}
+        {/* STEP 3: CONNECT GITHUB REPOSITORY (Vercel-style import picker) */}
         {currentStep === 3 && (
           <Card className="border-slate-800 bg-slate-900/80 backdrop-blur-xl">
-            <CardHeader>
-              <CardTitle className="text-xl">Connect GitHub Repository</CardTitle>
-              <CardDescription className="text-xs text-slate-400">
-                ShipPulse reads your merged PRs and commit tags to draft changelogs.
-              </CardDescription>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-xl">Import Git Repository</CardTitle>
+                  <CardDescription className="text-xs text-slate-400 mt-1">
+                    Select a repository to watch for commits, pull requests, and releases.
+                  </CardDescription>
+                </div>
+                <Badge variant="outline" className="text-[11px] font-mono border-slate-750 flex items-center gap-1">
+                  <GitBranch className="h-3 w-3 text-indigo-400" />
+                  <span>GitHub</span>
+                </Badge>
+              </div>
             </CardHeader>
-            <CardContent>
-              <form onSubmit={handleRepoSubmit} className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-slate-300">Repository (owner/name or URL)</label>
-                  <Input
-                    placeholder="https://github.com/acme/dashboard"
-                    value={formData.repoUrl}
-                    onChange={(e) => setFormData((p) => ({ ...p, repoUrl: e.target.value }))}
-                    required
+            <CardContent className="space-y-4">
+              {/* Search & Account Bar */}
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Search className="h-3.5 w-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={repoSearch}
+                    onChange={(e) => setRepoSearch(e.target.value)}
+                    placeholder="Search repositories..."
+                    className="h-9 w-full rounded-lg border border-slate-750 bg-slate-950 pl-8 pr-3 text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-slate-300">Release Branch</label>
-                  <Input
-                    value={formData.repoBranch}
-                    onChange={(e) => setFormData((p) => ({ ...p, repoBranch: e.target.value }))}
-                    placeholder="main"
-                  />
-                </div>
-                <div className="p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-xs text-indigo-300">
-                  🔒 Granular access: We only inspect metadata (commit titles, PR descriptions). Your source code is never stored or trained on.
-                </div>
-                <div className="flex items-center justify-between gap-3 mt-4">
-                  <Button type="button" variant="outline" onClick={() => setCurrentStep(2)}>
-                    <ArrowLeft className="h-4 w-4 mr-1" />
-                    Back
-                  </Button>
-                  <Button type="submit" variant="glow" className="flex items-center gap-2">
-                    <span>Connect & Sync</span>
-                    <ArrowRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </form>
+                <button
+                  type="button"
+                  onClick={fetchRepos}
+                  className="h-9 px-3 rounded-lg border border-slate-750 bg-slate-950 hover:bg-slate-900 text-xs text-slate-400 hover:text-white flex items-center gap-1.5 transition-colors"
+                  title="Refresh repository list"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${loadingRepos ? 'animate-spin text-indigo-400' : ''}`} />
+                </button>
+              </div>
+
+              {/* Repositories List */}
+              <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
+                {repos
+                  .filter(
+                    (r) =>
+                      !repoSearch ||
+                      r.name.toLowerCase().includes(repoSearch.toLowerCase()) ||
+                      r.fullName.toLowerCase().includes(repoSearch.toLowerCase())
+                  )
+                  .map((repo) => {
+                    const isSelected = formData.repoUrl === repo.url
+                    return (
+                      <div
+                        key={repo.id}
+                        className={`p-3 rounded-xl border transition-all flex items-center justify-between gap-3 ${
+                          isSelected
+                            ? 'border-indigo-500/60 bg-indigo-950/20'
+                            : 'border-slate-800 bg-slate-950/60 hover:border-slate-750 hover:bg-slate-950'
+                        }`}
+                      >
+                        <div className="space-y-1 min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-xs text-white truncate">{repo.fullName}</span>
+                            <span
+                              className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${
+                                repo.isPrivate
+                                  ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                  : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                              }`}
+                            >
+                              {repo.isPrivate ? 'Private' : 'Public'}
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-mono">
+                              {repo.defaultBranch}
+                            </span>
+                          </div>
+                          {repo.description && (
+                            <p className="text-[11px] text-slate-400 truncate">{repo.description}</p>
+                          )}
+                        </div>
+
+                        <Button
+                          size="sm"
+                          variant={isSelected ? 'secondary' : 'glow'}
+                          onClick={() => {
+                            setFormData((prev) => ({
+                              ...prev,
+                              repoUrl: repo.url,
+                              repoBranch: repo.defaultBranch || 'main',
+                            }))
+                            setCurrentStep(4)
+                            startSyncSimulation()
+                          }}
+                          className="h-7 text-xs shrink-0 px-3 font-semibold"
+                        >
+                          {isSelected ? 'Selected' : 'Import'}
+                        </Button>
+                      </div>
+                    )
+                  })}
+
+                {repos.length === 0 && !loadingRepos && (
+                  <div className="p-8 text-center border border-dashed border-slate-800 rounded-xl text-xs text-slate-500">
+                    No repositories found matching your search.
+                  </div>
+                )}
+              </div>
+
+              {/* Navigation Back */}
+              <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-xs">
+                <Button type="button" variant="outline" size="sm" onClick={() => setCurrentStep(2)}>
+                  <ArrowLeft className="h-4 w-4 mr-1" />
+                  Back
+                </Button>
+
+                <span className="text-[11px] text-slate-500">
+                  🔒 Granular access: We only inspect commits & tags.
+                </span>
+              </div>
             </CardContent>
           </Card>
         )}

@@ -25,68 +25,64 @@ export default function ReleasesPage() {
   const params = useParams()
   const projectSlug = (params?.projectSlug as string) || 'demo'
   const [filter, setFilter] = useState<'all' | 'published' | 'draft' | 'generated'>('all')
+  const [searchQuery, setSearchQuery] = useState('')
   const [isSyncing, setIsSyncing] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [releases, setReleases] = useState<any[]>([])
 
-  // Example real release items
-  const [releases, setReleases] = useState([
-    {
-      id: 'rel-1',
-      version: 'v2.4.0',
-      title: 'Automated Team Seat Billing & Edge Reliability',
-      slug: 'v2-4-0-seat-billing',
-      status: 'published',
-      publishedAt: 'Sep 13, 2026',
-      categories: ['feature', 'fix'],
-      summary: 'Dynamic team seat volume calculation, edge webhook execution in <12ms, and minor UI accessibility improvements.',
-      sourceCount: 8,
-    },
-    {
-      id: 'rel-2',
-      version: 'v2.3.1',
-      title: 'PostgreSQL Connection Pooling Optimizations',
-      slug: 'v2-3-1-pg-pooling',
-      status: 'published',
-      publishedAt: 'Sep 06, 2026',
-      categories: ['perf'],
-      summary: 'Reduced latency across multi-tenant database queries and fixed SSL keep-alive connections.',
-      sourceCount: 3,
-    },
-    {
-      id: 'rel-3',
-      version: 'v2.5.0-draft',
-      title: 'AI Tone Adjustment & Slack Interactive Relays',
-      slug: 'v2-5-0-slack-relays',
-      status: 'generated',
-      publishedAt: null,
-      categories: ['feature'],
-      summary: 'Synthesized from 12 recent commits: One-click executive summary rewrite and real-time Slack release broadcast.',
-      sourceCount: 12,
-    },
-  ])
+  const fetchReleases = React.useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const res = await fetch(`/api/dashboard/releases?projectSlug=${encodeURIComponent(projectSlug)}`)
+      if (!res.ok) {
+        if (res.status === 401) {
+          window.location.href = '/login'
+          return
+        }
+        throw new Error('Failed to fetch project releases')
+      }
+      const data = await res.json()
+      setReleases(data.releases || [])
+    } catch (err: any) {
+      setError('Unable to load releases. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }, [projectSlug])
+
+  React.useEffect(() => {
+    fetchReleases()
+  }, [fetchReleases])
 
   const filteredReleases = releases.filter((r) => {
-    if (filter === 'all') return true
-    return r.status === filter
+    const matchesFilter = filter === 'all' || r.status === filter
+    const matchesSearch = !searchQuery || 
+      r.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.version?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.summary?.toLowerCase().includes(searchQuery.toLowerCase())
+    return matchesFilter && matchesSearch
   })
 
-  const triggerAiSync = () => {
-    setIsSyncing(true)
-    setTimeout(() => {
-      setIsSyncing(false)
-      // Add newly synthesized release
-      const newRel = {
-        id: `rel-${Date.now()}`,
-        version: 'v2.5.1-auto',
-        title: 'Security Auditing & HMAC Webhook Verification',
-        slug: 'v2-5-1-security-auditing',
-        status: 'generated',
-        publishedAt: null,
-        categories: ['security', 'fix'],
-        summary: 'Synthesized from 4 recent commits: SHA-256 HMAC header verification on incoming GitHub webhooks.',
-        sourceCount: 4,
+  const triggerAiSync = async () => {
+    try {
+      setIsSyncing(true)
+      const res = await fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectSlug }),
+      })
+      if (!res.ok) {
+        throw new Error('Sync failed')
       }
-      setReleases((prev) => [newRel, ...prev])
-    }, 2000)
+      await fetchReleases()
+    } catch {
+      // Refresh to ensure any partial sync is reflected
+      await fetchReleases()
+    } finally {
+      setIsSyncing(false)
+    }
   }
 
   return (
@@ -141,78 +137,106 @@ export default function ReleasesPage() {
           <Search className="h-3.5 w-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Filter releases..."
             className="h-8 w-full rounded-lg border border-slate-800 bg-slate-900/60 pl-8 pr-3 text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
           />
         </div>
       </div>
 
-      {/* Releases List */}
-      <div className="space-y-3">
-        {filteredReleases.map((release) => (
-          <Card key={release.id} className="border-slate-800 bg-slate-900/50 hover:border-slate-750 transition-all">
-            <CardContent className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="space-y-1.5 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-mono text-xs font-semibold text-indigo-400">{release.version}</span>
-                  <span className="text-slate-600">&bull;</span>
-                  <h3 className="text-sm font-semibold text-white">{release.title}</h3>
-                  <Badge
-                    variant={
-                      release.status === 'published'
-                        ? 'feature'
-                        : release.status === 'generated'
-                        ? 'fix'
-                        : 'secondary'
-                    }
-                    className="capitalize text-[10px]"
-                  >
-                    {release.status}
-                  </Badge>
+      {/* Error state */}
+      {error && (
+        <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center justify-between">
+          <span>{error}</span>
+          <Button variant="outline" size="sm" onClick={fetchReleases} className="h-7 text-[11px]">
+            Retry
+          </Button>
+        </div>
+      )}
+
+      {/* Loading state */}
+      {loading ? (
+        <div className="space-y-3">
+          {[1, 2, 3].map((n) => (
+            <div key={n} className="h-28 rounded-xl border border-slate-800/80 bg-slate-900/30 animate-pulse" />
+          ))}
+        </div>
+      ) : (
+        /* Releases List */
+        <div className="space-y-3">
+          {filteredReleases.map((release) => (
+            <Card key={release.id} className="border-slate-800 bg-slate-900/50 hover:border-slate-750 transition-all">
+              <CardContent className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="space-y-1.5 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {release.version && (
+                      <>
+                        <span className="font-mono text-xs font-semibold text-indigo-400">{release.version}</span>
+                        <span className="text-slate-600">&bull;</span>
+                      </>
+                    )}
+                    <h3 className="text-sm font-semibold text-white">{release.title}</h3>
+                    <Badge
+                      variant={
+                        release.status === 'published'
+                          ? 'feature'
+                          : release.status === 'generated'
+                          ? 'fix'
+                          : 'secondary'
+                      }
+                      className="capitalize text-[10px]"
+                    >
+                      {release.status}
+                    </Badge>
+                  </div>
+
+                  <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">{release.summary || 'No summary provided.'}</p>
+
+                  <div className="flex items-center gap-4 text-[11px] text-slate-500 pt-1">
+                    <span>{release.published_at ? `Published on ${new Date(release.published_at).toLocaleDateString()}` : 'Not yet published'}</span>
+                    <span>&bull;</span>
+                    <span>{release.views_count ?? 0} views</span>
+                  </div>
                 </div>
 
-                <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">{release.summary}</p>
-
-                <div className="flex items-center gap-4 text-[11px] text-slate-500 pt-1">
-                  <span>{release.publishedAt ? `Published on ${release.publishedAt}` : 'Not yet published'}</span>
-                  <span>&bull;</span>
-                  <span>{release.sourceCount} linked Git commits/PRs</span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                <Link href={`/${projectSlug}/releases/${release.id}`}>
-                  <Button variant="outline" size="sm" className="h-8 text-xs border-slate-750 hover:bg-slate-800">
-                    <Edit3 className="h-3.5 w-3.5 mr-1.5 text-slate-400" />
-                    Edit
-                  </Button>
-                </Link>
-
-                {release.status === 'published' && (
-                  <Link href={`/${projectSlug}/${release.slug}`} target="_blank">
-                    <Button variant="ghost" size="sm" className="h-8 text-xs text-slate-400 hover:text-white">
-                      <ExternalLink className="h-3.5 w-3.5" />
+                <div className="flex items-center gap-2 shrink-0">
+                  <Link href={`/${projectSlug}/releases/${release.id}`}>
+                    <Button variant="outline" size="sm" className="h-8 text-xs border-slate-750 hover:bg-slate-800">
+                      <Edit3 className="h-3.5 w-3.5 mr-1.5 text-slate-400" />
+                      Edit
                     </Button>
                   </Link>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
 
-        {filteredReleases.length === 0 && (
-          <div className="p-12 text-center border border-dashed border-slate-800 rounded-2xl">
-            <Sparkles className="h-8 w-8 text-slate-600 mx-auto mb-3" />
-            <p className="text-sm font-semibold text-slate-300">No releases found</p>
-            <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-              Run an AI sync to automatically group your recent commits, or create a release draft manually.
-            </p>
-            <Button size="sm" variant="glow" onClick={triggerAiSync} className="mt-4">
-              Run First AI Sync
-            </Button>
-          </div>
-        )}
-      </div>
+                  {release.status === 'published' && (
+                    <Link href={`/${projectSlug}/${release.slug}`} target="_blank">
+                      <Button variant="ghost" size="sm" className="h-8 text-xs text-slate-400 hover:text-white">
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </Button>
+                    </Link>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+
+          {filteredReleases.length === 0 && (
+            <div className="p-12 text-center border border-dashed border-slate-800 rounded-2xl">
+              <Sparkles className="h-8 w-8 text-slate-600 mx-auto mb-3" />
+              <p className="text-sm font-semibold text-slate-300">No releases found</p>
+              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                Run an AI sync to automatically group your recent commits, or create a release draft manually.
+              </p>
+              <Link href={`/${projectSlug}/releases/new`}>
+                <Button size="sm" variant="glow" className="mt-4">
+                  Create First Release
+                </Button>
+              </Link>
+            </div>
+          )}
+        </div>
+      )}
+
     </div>
   )
 }
