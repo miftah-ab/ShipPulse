@@ -26,22 +26,12 @@ import { Card, CardContent } from '@/components/ui/card'
 export default function NewReleasePage() {
   const params = useParams()
   const router = useRouter()
-  const projectSlug = (params?.projectSlug as string) || 'demo'
+  const projectSlug = params?.projectSlug as string
 
-  const [version, setVersion] = useState('v2.5.0')
-  const [title, setTitle] = useState('Dynamic Team Seat Billing & Automated Invoicing')
-  const [content, setContent] = useState(`## Overview
-We're excited to introduce flexible team seat billing and volume tiers.
-
-### What's New
-- **On-the-fly Seat Allocation:** Team administrators can invite new engineers instantly without interrupting active subscriptions.
-- **Prorated Invoicing:** Mid-cycle adjustments are calculated automatically at billing cycle completion.
-
-### Improvements & Fixes
-- Fixed race condition in webhook verification pipeline.
-- Database query latency dropped by 34% using connection pooling.
-`)
-  const [selectedCategories, setSelectedCategories] = useState<string[]>(['feature', 'fix'])
+  const [version, setVersion] = useState('')
+  const [title, setTitle] = useState('')
+  const [content, setContent] = useState('')
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [isAiProcessing, setIsAiProcessing] = useState(false)
   const [previewMode, setPreviewMode] = useState(false)
   const [savedStatus, setSavedStatus] = useState<string | null>(null)
@@ -60,24 +50,25 @@ We're excited to introduce flexible team seat billing and volume tiers.
     )
   }
 
-  // AI Tone adjustment actions
-  const applyAiTone = (tone: string) => {
+  // AI Tone adjustment actions — calls the real Groq-powered API
+  const applyAiTone = async (tone: string) => {
+    if (!content.trim()) return
     setIsAiProcessing(true)
-    setTimeout(() => {
-      setIsAiProcessing(false)
-      if (tone === 'executive') {
-        setContent(`## Executive Brief  -  Release ${version}
-This update activates dynamic enterprise seat billing, projected to eliminate manual invoicing overhead while strengthening webhook reliability across distributed edge locations.`)
-      } else if (tone === 'bulleted') {
-        setContent(`## Highlights (${version})
-* Added dynamic license allocation for enterprise seats
-* Automated mid-month prorated invoice line items
-* Hardened edge webhook listener against replay attacks
-* Benchmarked 34% faster database round-trips`)
-      } else if (tone === 'widget') {
-        setContent(`Introducing dynamic seat billing and lightning-fast webhook reconciliation. Team admins can now scale seats with automated prorating.`)
+    try {
+      const res = await fetch('/api/ai/tone', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content, tone, version }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.content) setContent(data.content)
       }
-    }, 1200)
+    } catch (e) {
+      console.error('AI tone failed:', e)
+    } finally {
+      setIsAiProcessing(false)
+    }
   }
 
   const handleSaveDraft = async () => {
@@ -202,7 +193,7 @@ This update activates dynamic enterprise seat billing, projected to eliminate ma
               <Input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Dynamic Team Seat Billing"
+                placeholder="e.g. Payment Processor Upgrade & Performance Boost"
                 className="text-xs"
               />
             </div>
@@ -310,27 +301,13 @@ This update activates dynamic enterprise seat billing, projected to eliminate ma
           {/* Linked Sources Box */}
           <Card className="border-slate-800 bg-slate-900/50">
             <CardContent className="p-5 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <GitBranch className="h-4 w-4 text-slate-400" />
-                  <h4 className="text-xs font-bold text-slate-200">Linked Commits & PRs</h4>
-                </div>
-                <span className="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-400 font-mono">
-                  3 sources
-                </span>
+              <div className="flex items-center gap-2">
+                <GitBranch className="h-4 w-4 text-slate-400" />
+                <h4 className="text-xs font-bold text-slate-200">Linked Commits & PRs</h4>
               </div>
-
-              <div className="space-y-2 text-xs font-mono">
-                <div className="p-2 rounded bg-slate-950 border border-slate-850 text-slate-300">
-                  <span className="text-indigo-400">#142</span> feat(stripe): dynamic seat calculations
-                </div>
-                <div className="p-2 rounded bg-slate-950 border border-slate-850 text-slate-300">
-                  <span className="text-indigo-400">#145</span> fix(edge): verify webhook signature HMAC
-                </div>
-                <div className="p-2 rounded bg-slate-950 border border-slate-850 text-slate-300">
-                  <span className="text-indigo-400">#148</span> perf: add connection pooling to pg
-                </div>
-              </div>
+              <p className="text-[11px] text-slate-500">
+                Commits and PRs will be automatically linked when a GitHub repository is connected via the Integrations page.
+              </p>
             </CardContent>
           </Card>
         </div>

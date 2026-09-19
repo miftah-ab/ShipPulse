@@ -1,141 +1,100 @@
-﻿// ============================================================
-// POST /api/public/feedback
-// Submit feedback on a release  -  rate limited, spam-resistant
+// ============================================================
+// GET /api/public/feedback?projectSlug=...
+// Public endpoint to list submitted feedback for a project
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
-import { checkRateLimit, getIdentifier, RATE_LIMITS } from '@/lib/rate-limit'
-import { createHash } from 'crypto'
-import { z } from 'zod'
 
-const FeedbackSchema = z.object({
-  projectSlug: z.string().min(1).max(50),
-  releaseSlug: z.string().min(1).max(100),
-  type: z.enum(['helpful', 'not_helpful', 'reaction', 'comment', 'submission']),
-  reaction: z.string().max(20).optional(),
-  content: z.string().max(2000).optional(),
-})
-
-export async function POST(request: NextRequest) {
-  const supabase = createServiceClient()
-
-  // Rate limit
-  const identifier = getIdentifier(request)
-  const rateLimit = await checkRateLimit(supabase, {
-    identifier,
-    endpoint: 'feedback',
-    limitPerMinute: RATE_LIMITS.feedback,
-  })
-  if (!rateLimit.allowed) {
-    return NextResponse.json(
-      { error: 'Too many requests. Please wait before submitting more feedback.' },
-      { status: 429 }
-    )
-  }
-
-  // Parse body
-  let body: unknown
+export async function GET(request: NextRequest) {
   try {
-    body = await request.json()
-  } catch {
-    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
-  }
+    const { searchParams } = new URL(request.url)
+    const projectSlug = searchParams.get('projectSlug')
 
-  const parsed = FeedbackSchema.safeParse(body)
-  if (!parsed.success) {
-    return NextResponse.json({ error: 'Invalid input', details: parsed.error.flatten() }, { status: 400 })
-  }
-
-  const { projectSlug, releaseSlug, type, reaction, content } = parsed.data
-
-  // Validate content for comment/submission types
-  if ((type === 'comment' || type === 'submission') && !content?.trim()) {
-    return NextResponse.json({ error: 'Content is required for comments.' }, { status: 400 })
-  }
-
-  // Lookup project
-  const { data: project } = await supabase
-    .from('shippulse_projects')
-    .select('id')
-    .eq('slug', projectSlug)
-    .eq('is_public', true)
-    .is('deleted_at', null)
-    .single()
-
-  if (!project) {
-    return NextResponse.json({ error: 'Project not found' }, { status: 404 })
-  }
-
-  // Lookup published release
-  const { data: release } = await supabase
-    .from('shippulse_releases')
-    .select('id')
-    .eq('project_id', project.id)
-    .eq('slug', releaseSlug)
-    .eq('status', 'published')
-    .is('deleted_at', null)
-    .single()
-
-  if (!release) {
-    return NextResponse.json({ error: 'Release not found' }, { status: 404 })
-  }
-
-  // Hash visitor and IP for spam detection (no PII stored)
-  const visitorHash = createHash('sha256')
-    .update(identifier + (process.env.APP_SECRET ?? ''))
-    .digest('hex')
-    .slice(0, 16)
-
-  const ipHash = createHash('sha256')
-    .update(identifier)
-    .digest('hex')
-    .slice(0, 16)
-
-  // Basic spam detection  -  prevent duplicate helpful/not_helpful from same visitor
-  if (type === 'helpful' || type === 'not_helpful') {
-    const { count } = await supabase
-      .from('shippulse_feedback')
-      .select('*', { count: 'exact', head: true })
-      .eq('release_id', release.id)
-      .eq('visitor_hash', visitorHash)
-      .in('type', ['helpful', 'not_helpful'])
-
-    if ((count ?? 0) > 0) {
-      return NextResponse.json({ error: 'You have already voted on this release.' }, { status: 409 })
+    if (!projectSlug) {
+      return NextResponse.json({ error: 'projectSlug is required' }, { status: 400 })
     }
+
+    const serviceDb = createServiceClient()
+
+    const { data: project } = await serviceDb
+      .from('shippulse_projects')
+      .select('id')
+      .eq('slug', projectSlug)
+      .is('deleted_at', null)
+      .maybeSingle()
+
+    if (!project) {
+      return NextResponse.json({ feedback: [] })
+    }
+
+    const { data: feedback } = await serviceDb
+      .from('shippulse_feedback')
+      .select('id, text, rating, reaction, created_at, shippulse_releases(version, title)')
+      .eq('project_id', project.id)
+      .order('created_at', { ascending: false })
+      .limit(100)
+
+    return NextResponse.json({
+      feedback: (feedback ?? []).map((f: any) => ({
+        id: f.id,
+        text: f.text || '',
+        rating: f.rating || null,
+        reaction: f.reaction || null,
+        releaseVersion: f.shippulse_releases?.version || null,
+        releaseTitle: f.shippulse_releases?.title || null,
+        createdAt: new Date(f.created_at).toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+        }),
+      })),
+    })
+  } catch (err: any) {
+    console.error('[Feedback API] Error:', err.message)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
-
-  // Insert feedback
-  const { error } = await supabase.from('shippulse_feedback').insert({
-    project_id: project.id,
-    release_id: release.id,
-    visitor_hash: visitorHash,
-    type,
-    reaction: reaction ?? null,
-    content: content ? sanitizeFeedbackContent(content) : null,
-    is_spam: false,
-    is_approved: true,
-    ip_hash: ipHash,
-  })
-
-  if (error) {
-    console.error('[Feedback] DB insert error:', error.message)
-    return NextResponse.json({ error: 'Failed to submit feedback' }, { status: 500 })
-  }
-
-  // Update release feedback count (non-blocking)
-  supabase.rpc('shippulse_increment_feedback_count', { release_id: release.id })
-    .then(() => {})
-
-  return NextResponse.json({ status: 'received' })
 }
 
-function sanitizeFeedbackContent(content: string): string {
-  // Strip HTML tags, normalize whitespace
-  return content
-    .replace(/<[^>]*>/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 2000)
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { projectSlug, releaseId, text, rating, reaction } = body
+
+    if (!projectSlug) {
+      return NextResponse.json({ error: 'projectSlug is required' }, { status: 400 })
+    }
+
+    const serviceDb = createServiceClient()
+
+    const { data: project } = await serviceDb
+      .from('shippulse_projects')
+      .select('id')
+      .eq('slug', projectSlug)
+      .eq('is_public', true)
+      .is('deleted_at', null)
+      .maybeSingle()
+
+    if (!project) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+    }
+
+    const { error } = await serviceDb
+      .from('shippulse_feedback')
+      .insert({
+        project_id: project.id,
+        release_id: releaseId || null,
+        text: text || null,
+        rating: rating || null,
+        reaction: reaction || null,
+      })
+
+    if (error) {
+      return NextResponse.json({ error: 'Failed to submit feedback' }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (err: any) {
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
 }

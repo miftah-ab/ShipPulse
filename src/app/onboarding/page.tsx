@@ -219,7 +219,7 @@ export default function OnboardingPage() {
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-slate-300">Workspace Name</label>
                   <Input
-                    placeholder="e.g. Acme Corp"
+                    placeholder="e.g. My Company"
                     value={formData.workspaceName}
                     onChange={(e) =>
                       setFormData((p) => ({
@@ -241,7 +241,7 @@ export default function OnboardingPage() {
                       className="rounded-l-none"
                       value={formData.workspaceSlug}
                       onChange={(e) => setFormData((p) => ({ ...p, workspaceSlug: e.target.value }))}
-                      placeholder="acme-corp"
+                      placeholder="my-company"
                       required
                     />
                   </div>
@@ -269,7 +269,7 @@ export default function OnboardingPage() {
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-slate-300">Product / Project Name</label>
                   <Input
-                    placeholder="e.g. Acme Cloud Dashboard"
+                    placeholder="e.g. Main Dashboard"
                     value={formData.projectName}
                     onChange={(e) =>
                       setFormData((p) => ({
@@ -291,7 +291,7 @@ export default function OnboardingPage() {
                       className="rounded-l-none"
                       value={formData.projectSlug}
                       onChange={(e) => setFormData((p) => ({ ...p, projectSlug: e.target.value }))}
-                      placeholder="acme-cloud"
+                      placeholder="main-dashboard"
                       required
                     />
                   </div>

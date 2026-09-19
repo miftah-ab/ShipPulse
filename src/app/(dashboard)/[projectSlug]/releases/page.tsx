@@ -23,7 +23,7 @@ import { Card, CardContent } from '@/components/ui/card'
 
 export default function ReleasesPage() {
   const params = useParams()
-  const projectSlug = (params?.projectSlug as string) || 'demo'
+  const projectSlug = params?.projectSlug as string
   const [filter, setFilter] = useState<'all' | 'published' | 'draft' | 'generated'>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [isSyncing, setIsSyncing] = useState(false)

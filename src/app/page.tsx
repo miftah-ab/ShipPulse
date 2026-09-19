@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import React, { useState } from 'react'
 import Link from 'next/link'
@@ -113,10 +113,9 @@ export default function LandingPage() {
                 Connect GitHub Repository
               </Button>
             </Link>
-            <Link href="#demo" className="w-full sm:w-auto">
+            <Link href="#how-it-works" className="w-full sm:w-auto">
               <Button size="lg" variant="outline" className="w-full h-12 px-8 text-base border-slate-700 hover:bg-slate-800 flex items-center gap-2 justify-center">
-                <Play className="h-4 w-4 fill-current" />
-                Watch 60s Demo
+                See How It Works
               </Button>
             </Link>
           </div>
@@ -148,7 +147,7 @@ export default function LandingPage() {
         <div className="text-center mb-10">
           <Badge variant="outline" className="mb-3 text-xs">Transformation Engine</Badge>
           <h2 className="text-2xl sm:text-3xl font-bold">See What ShipPulse Does With Your Git History</h2>
-          <p className="text-slate-400 text-sm mt-2">Toggle between raw commit chaos and clean customer intelligence.</p>
+          <p className="text-slate-400 text-sm mt-2">Toggle between raw commit history and clean customer-facing changelogs.</p>
         </div>
 
         <div className="rounded-2xl border border-slate-800 bg-slate-900/90 shadow-2xl overflow-hidden backdrop-blur-xl">
@@ -158,7 +157,7 @@ export default function LandingPage() {
               <span className="w-3 h-3 rounded-full bg-rose-500/80" />
               <span className="w-3 h-3 rounded-full bg-amber-500/80" />
               <span className="w-3 h-3 rounded-full bg-emerald-500/80" />
-              <span className="text-xs text-slate-500 ml-2 font-mono">repo: acme/dashboard @ branch: main</span>
+              <span className="text-xs text-slate-500 ml-2 font-mono">your-org/your-repo @ main</span>
             </div>
             <div className="flex items-center gap-2 bg-slate-900 p-1 rounded-lg border border-slate-800">
               <button
@@ -185,39 +184,39 @@ export default function LandingPage() {
           <div className="p-6">
             {activeTab === 'raw' ? (
               <div className="font-mono text-xs text-slate-300 space-y-2.5 bg-slate-950 p-5 rounded-xl border border-slate-850">
-                <p className="text-slate-500"># Git log 7 commits since v2.3.0</p>
-                <p><span className="text-amber-400">commit 8a1f2b</span> fix typo in db query handler</p>
+                <p className="text-slate-500"># git log — 7 commits since last release</p>
+                <p><span className="text-amber-400">commit 8a1f2b</span> fix typo in auth middleware</p>
                 <p><span className="text-amber-400">commit 9c4d1e</span> chore: bump deps and update lockfile</p>
-                <p><span className="text-amber-400">commit 1b7a8c</span> refactor: clean up billing controller auth token cache</p>
-                <p><span className="text-amber-400">commit 3e9d4a</span> feat(stripe): implement team seat usage billing tier v2</p>
-                <p><span className="text-amber-400">commit 6f0e2b</span> fix: make sure webhook signature validation passes on edge</p>
-                <p><span className="text-amber-400">commit 7d1c3a</span> temp commit: test fix in staging</p>
-                <p><span className="text-amber-400">commit 2a8b9f</span> Merge pull request #142 from acme/feature/seat-billing</p>
+                <p><span className="text-amber-400">commit 1b7a8c</span> refactor: clean up controller token cache</p>
+                <p><span className="text-amber-400">commit 3e9d4a</span> feat: implement new billing plan tier</p>
+                <p><span className="text-amber-400">commit 6f0e2b</span> fix: webhook signature validation on edge</p>
+                <p><span className="text-amber-400">commit 7d1c3a</span> temp commit: staging test</p>
+                <p><span className="text-amber-400">commit 2a8b9f</span> Merge pull request #142 feature/billing-plans</p>
               </div>
             ) : (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <span className="text-lg font-bold text-white">v2.4.0  -  Flexible Seat Billing & Edge Reliability</span>
-                    <Badge variant="feature">New Features</Badge>
-                    <Badge variant="fix">Bug Fixes</Badge>
+                    <span className="text-lg font-bold text-white">v2.1.0  —  Flexible Billing Plans</span>
+                    <Badge variant="feature">New Feature</Badge>
+                    <Badge variant="fix">Bug Fix</Badge>
                   </div>
-                  <span className="text-xs text-slate-400">Published Sep 13, 2026</span>
+                  <span className="text-xs text-slate-400">Just published</span>
                 </div>
                 <p className="text-sm text-slate-300 leading-relaxed">
-                  This release introduces automated team seat calculations with tiered volume discounts, alongside enhanced edge webhook reliability for instant payment reconciliation.
+                  This release introduces flexible billing plan tiers with improved webhook reliability and edge performance improvements.
                 </p>
                 <div className="space-y-2 pt-2 border-t border-slate-800">
                   <div className="flex items-start gap-2.5">
                     <CheckCircle2 className="h-4 w-4 text-emerald-400 mt-0.5 shrink-0" />
                     <p className="text-xs text-slate-300">
-                      <strong className="text-white">Dynamic Team Seat Billing:</strong> Workspaces can now assign licenses on the fly, with automated prorated invoicing at the billing cycle end.
+                      <strong className="text-white">Flexible Billing Plans:</strong> Upgrade, downgrade, or switch plans instantly with prorated billing at cycle end.
                     </p>
                   </div>
                   <div className="flex items-start gap-2.5">
                     <CheckCircle2 className="h-4 w-4 text-emerald-400 mt-0.5 shrink-0" />
                     <p className="text-xs text-slate-300">
-                      <strong className="text-white">Edge Webhook Verification:</strong> Webhook listeners now execute in under 12ms across 35 globally distributed regions.
+                      <strong className="text-white">Edge Webhook Reliability:</strong> Webhook delivery now executes with HMAC signature verification in under 15ms globally.
                     </p>
                   </div>
                 </div>

@@ -1,6 +1,7 @@
 // ============================================================
 // POST /api/sync
 // Trigger repository synchronization & AI change analysis
+// Fetches real commits from GitHub using the project's repo_url
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest) {
     // Find project
     const { data: project, error: pErr } = await serviceDb
       .from('shippulse_projects')
-      .select('id, workspace_id, name, slug')
+      .select('id, workspace_id, name, slug, repo_url, default_branch, last_synced_at')
       .eq('slug', projectSlug)
       .is('deleted_at', null)
       .maybeSingle()
@@ -49,49 +50,81 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
-    // Process sync analysis with changes
-    const rawCommits = [
+    if (!project.repo_url) {
+      return NextResponse.json({
+        error: 'No repository connected. Configure a GitHub repository in the Integrations page first.',
+      }, { status: 422 })
+    }
+
+    // Get provider token from session
+    const { data: { session } } = await supabase.auth.getSession()
+    const providerToken = session?.provider_token
+
+    if (!providerToken) {
+      return NextResponse.json({
+        error: 'GitHub OAuth token missing. Please reconnect your GitHub account.',
+      }, { status: 401 })
+    }
+
+    // Parse owner/repo from repo_url
+    const repoMatch = project.repo_url.match(/github\.com\/([^/]+\/[^/]+)/)
+    if (!repoMatch) {
+      return NextResponse.json({ error: 'Invalid repository URL format.' }, { status: 422 })
+    }
+    const repoFullName = repoMatch[1].replace(/\.git$/, '')
+    const branch = project.default_branch || 'main'
+
+    // Build `since` param from last sync timestamp
+    const since = project.last_synced_at
+      ? `&since=${encodeURIComponent(project.last_synced_at)}`
+      : ''
+
+    const ghRes = await fetch(
+      `https://api.github.com/repos/${repoFullName}/commits?sha=${branch}&per_page=50${since}`,
       {
-        sha: 'a1b2c3d',
-        message: 'feat(billing): dynamic seat licensing and team tier calculations',
-        authorName: 'ShipPulse Team',
-        authorDate: new Date().toISOString(),
-        additions: 124,
-        deletions: 12,
-        changedFiles: 4,
-        url: 'https://github.com',
-        isMerge: false,
-      },
-      {
-        sha: 'e4f5g6h',
-        message: 'fix(webhook): verify HMAC signatures with timing safe equal',
-        authorName: 'ShipPulse Team',
-        authorDate: new Date().toISOString(),
-        additions: 45,
-        deletions: 8,
-        changedFiles: 2,
-        url: 'https://github.com',
-        isMerge: false,
-      },
-      {
-        sha: 'i7j8k9l',
-        message: 'perf(db): connection pool optimization for low-latency queries',
-        authorName: 'ShipPulse Team',
-        authorDate: new Date().toISOString(),
-        additions: 89,
-        deletions: 3,
-        changedFiles: 3,
-        url: 'https://github.com',
-        isMerge: false,
+        headers: {
+          Authorization: `token ${providerToken}`,
+          Accept: 'application/vnd.github.v3+json',
+        },
       }
-    ]
+    )
+
+    if (!ghRes.ok) {
+      const ghErr = await ghRes.json().catch(() => ({}))
+      return NextResponse.json({
+        error: `GitHub API error: ${(ghErr as any).message || ghRes.statusText}`,
+      }, { status: 502 })
+    }
+
+    const commits = await ghRes.json()
+
+    const rawCommits = (commits as any[]).map((c) => ({
+      sha: c.sha?.slice(0, 7) || '',
+      message: c.commit?.message?.split('\n')[0] || '',
+      authorName: c.commit?.author?.name || 'Unknown',
+      authorDate: c.commit?.author?.date || new Date().toISOString(),
+      additions: 0,
+      deletions: 0,
+      changedFiles: 0,
+      url: c.html_url || '',
+      isMerge: (c.commit?.message || '').startsWith('Merge'),
+    }))
 
     const analysis = analyzeChanges(rawCommits, [], [])
+
+    // Update last_synced_at timestamp
+    await serviceDb
+      .from('shippulse_projects')
+      .update({ last_synced_at: new Date().toISOString() })
+      .eq('id', project.id)
 
     return NextResponse.json({
       success: true,
       analysis,
-      message: 'Sync completed and changes analyzed successfully.',
+      commitsIngested: rawCommits.length,
+      message: rawCommits.length > 0
+        ? `Sync completed. Ingested ${rawCommits.length} new commits from ${repoFullName}.`
+        : 'Repository is already up to date. No new commits found.',
     })
   } catch (err: any) {
     console.error('[API /api/sync] Error:', err.message)

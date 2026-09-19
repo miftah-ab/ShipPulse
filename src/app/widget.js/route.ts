@@ -100,25 +100,34 @@ export async function GET() {
 
   var drawer = document.createElement('div');
   drawer.className = 'sp-drawer';
-  drawer.innerHTML = \`
-    <div class="sp-header">
-      <h3 class="sp-title">What&apos;s New in \${projectSlug}</h3>
-      <button class="sp-close">&times;</button>
-    </div>
-    <div class="sp-body" id="sp-releases-container">
-      <div class="sp-item">
-        <span class="sp-item-tag">FEATURE</span>
-        <h4 class="sp-item-title">Automated Team Seat Billing</h4>
-        <p class="sp-item-desc">Admins can now add team seats dynamically with instant prorating.</p>
-      </div>
-      <div class="sp-item">
-        <span class="sp-item-tag">PERFORMANCE</span>
-        <h4 class="sp-item-title">Edge Webhook Verification</h4>
-        <p class="sp-item-desc">Incoming webhook signatures now verified in under 12ms globally.</p>
-      </div>
-    </div>
-  \`;
+  drawer.innerHTML = '<div class="sp-header"><h3 class="sp-title">What\'s New in ' + projectSlug + '</h3><button class="sp-close">&times;</button></div><div class="sp-body" id="sp-releases-container"><p style="font-size:12px;color:#9CA3AF;text-align:center;padding:20px 0;">Loading...</p></div>';
   shadow.appendChild(drawer);
+
+  // Fetch real releases from the changelog API
+  fetch(hostOrigin + '/api/public/changelog?projectSlug=' + encodeURIComponent(projectSlug))
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      var container = shadow.getElementById('sp-releases-container');
+      if (!container) return;
+      var releases = data.releases || [];
+      if (releases.length === 0) {
+        container.innerHTML = '<p style="font-size:12px;color:#9CA3AF;text-align:center;padding:20px 0;">No releases yet.</p>';
+        return;
+      }
+      container.innerHTML = releases.slice(0, 5).map(function(r) {
+        var tag = (r.categories && r.categories[0]) ? r.categories[0].toUpperCase() : 'UPDATE';
+        var version = r.version ? '<span style="font-size:10px;font-family:monospace;color:#817CFF;">' + r.version + '</span> ' : '';
+        return '<div class="sp-item">'
+          + '<span class="sp-item-tag">' + tag + '</span>'
+          + '<h4 class="sp-item-title">' + version + r.title + '</h4>'
+          + (r.summary ? '<p class="sp-item-desc">' + r.summary + '</p>' : '')
+          + '</div>';
+      }).join('');
+    })
+    .catch(function() {
+      var container = shadow.getElementById('sp-releases-container');
+      if (container) container.innerHTML = '<p style="font-size:12px;color:#9CA3AF;text-align:center;padding:20px 0;">Unable to load releases.</p>';
+    });
 
   launcher.onclick = function() {
     drawer.classList.toggle('open');

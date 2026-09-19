@@ -23,20 +23,13 @@ import { Card, CardContent } from '@/components/ui/card'
 export default function EditReleasePage() {
   const params = useParams()
   const router = useRouter()
-  const projectSlug = (params?.projectSlug as string) || 'demo'
+  const projectSlug = params?.projectSlug as string
   const releaseId = (params?.id as string) || ''
 
-  const [version, setVersion] = useState('v2.4.0')
-  const [title, setTitle] = useState('Automated Team Seat Billing & Edge Reliability')
-  const [content, setContent] = useState(`## Overview
-Dynamic team seat scaling and latency drops across edge verifications.
-
-### Shipped Items
-- **Team Seat Scaling:** Administrators can provision seats on demand without service interruption.
-- **Edge HMAC Verification:** Webhook listeners verify SHA-256 signatures in under 12ms globally.
-- **PostgreSQL Connection Pooling:** Stabilized database query latency by 34%.
-`)
-  const [selectedCategories, setSelectedCategories] = useState<string[]>(['feature', 'perf'])
+  const [version, setVersion] = useState('')
+  const [title, setTitle] = useState('')
+  const [content, setContent] = useState('')
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [isAiProcessing, setIsAiProcessing] = useState(false)
   const [previewMode, setPreviewMode] = useState(false)
   const [savedStatus, setSavedStatus] = useState<string | null>(null)
@@ -55,18 +48,24 @@ Dynamic team seat scaling and latency drops across edge verifications.
     )
   }
 
-  const applyAiTone = (tone: string) => {
+  const applyAiTone = async (tone: string) => {
+    if (!content.trim()) return
     setIsAiProcessing(true)
-    setTimeout(() => {
-      setIsAiProcessing(false)
-      if (tone === 'executive') {
-        setContent(`## Executive Summary  -  ${version}\nThis deployment activates automated license allocation with zero manual overhead, backed by global SHA-256 edge verification.`)
-      } else if (tone === 'bulleted') {
-        setContent(`## Release Highlights (${version})\n* Dynamic seat billing with instant pro-rating\n* 12ms edge webhook signature validation\n* 34% faster database read operations`)
-      } else if (tone === 'widget') {
-        setContent(`Seat billing is now automated! Provision seats seamlessly with improved query speeds.`)
+    try {
+      const res = await fetch('/api/ai/tone', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content, tone, version }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.content) setContent(data.content)
       }
-    }, 1000)
+    } catch (e) {
+      console.error('AI tone failed:', e)
+    } finally {
+      setIsAiProcessing(false)
+    }
   }
 
   const [loading, setLoading] = useState(true)
@@ -313,27 +312,13 @@ Dynamic team seat scaling and latency drops across edge verifications.
 
           <Card className="border-slate-800 bg-slate-900/50">
             <CardContent className="p-5 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <GitBranch className="h-4 w-4 text-slate-400" />
-                  <h4 className="text-xs font-bold text-slate-200">Linked Commits & PRs</h4>
-                </div>
-                <span className="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-400 font-mono">
-                  3 sources
-                </span>
+              <div className="flex items-center gap-2">
+                <GitBranch className="h-4 w-4 text-slate-400" />
+                <h4 className="text-xs font-bold text-slate-200">Linked Commits & PRs</h4>
               </div>
-
-              <div className="space-y-2 text-xs font-mono">
-                <div className="p-2 rounded bg-slate-950 border border-slate-850 text-slate-300">
-                  <span className="text-indigo-400">#142</span> feat(stripe): dynamic seat calculations
-                </div>
-                <div className="p-2 rounded bg-slate-950 border border-slate-850 text-slate-300">
-                  <span className="text-indigo-400">#145</span> fix(edge): verify webhook signature HMAC
-                </div>
-                <div className="p-2 rounded bg-slate-950 border border-slate-850 text-slate-300">
-                  <span className="text-indigo-400">#148</span> perf: add connection pooling to pg
-                </div>
-              </div>
+              <p className="text-[11px] text-slate-500">
+                Commits and PRs will be automatically linked when a GitHub repository is connected via the Integrations page.
+              </p>
             </CardContent>
           </Card>
         </div>

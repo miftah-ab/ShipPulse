@@ -1,139 +1,104 @@
-﻿// ============================================================
-// POST /api/public/subscribe
-// Subscribe to a project's changelog  -  rate limited, confirmation required
+// ============================================================
+// POST /api/public/react — record an emoji reaction on a release
+// GET  /api/public/subscribe?projectSlug=...&list=true
+// POST /api/public/subscribe — add subscriber to project
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
-import { sendSubscriberConfirmation } from '@/lib/email/resend'
-import { checkRateLimit, getIdentifier, RATE_LIMITS } from '@/lib/rate-limit'
-import { createHash } from 'crypto'
-import { z } from 'zod'
 
-const SubscribeSchema = z.object({
-  projectSlug: z.string().min(1).max(50),
-  email: z.string().email().max(254),
-  name: z.string().max(100).optional(),
-})
+export async function GET(request: NextRequest) {
+  // Used by the dashboard subscribers page to list subscribers
+  const { searchParams } = new URL(request.url)
+  const projectSlug = searchParams.get('projectSlug')
+  const list = searchParams.get('list')
 
-export async function POST(request: NextRequest) {
-  const supabase = createServiceClient()
-
-  // Rate limit
-  const identifier = getIdentifier(request)
-  const rateLimit = await checkRateLimit(supabase, {
-    identifier,
-    endpoint: 'subscribe',
-    limitPerMinute: RATE_LIMITS.subscribe,
-  })
-  if (!rateLimit.allowed) {
-    return NextResponse.json(
-      { error: 'Too many subscription attempts. Please wait a minute.' },
-      { status: 429 }
-    )
+  if (!projectSlug || list !== 'true') {
+    return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
   }
 
-  // Parse and validate body
-  let body: unknown
-  try {
-    body = await request.json()
-  } catch {
-    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
-  }
+  const serviceDb = createServiceClient()
 
-  const parsed = SubscribeSchema.safeParse(body)
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: 'Invalid input', details: parsed.error.flatten() },
-      { status: 400 }
-    )
-  }
-
-  const { projectSlug, email, name } = parsed.data
-
-  // Lookup public project
-  const { data: project } = await supabase
+  const { data: project } = await serviceDb
     .from('shippulse_projects')
-    .select('id, name, show_subscribe')
+    .select('id')
     .eq('slug', projectSlug)
-    .eq('is_public', true)
     .is('deleted_at', null)
-    .single()
+    .maybeSingle()
 
   if (!project) {
-    return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+    return NextResponse.json({ subscribers: [] })
   }
 
-  if (!project.show_subscribe) {
-    return NextResponse.json({ error: 'Subscriptions are not enabled for this project' }, { status: 403 })
-  }
-
-  // Hash IP for spam detection
-  const ipHash = createHash('sha256')
-    .update(identifier + (process.env.APP_SECRET ?? ''))
-    .digest('hex')
-    .slice(0, 16)
-
-  // Upsert subscriber (idempotent  -  same email same project = update)
-  const { data: subscriber, error } = await supabase
+  const { data: subs } = await serviceDb
     .from('shippulse_subscribers')
-    .upsert(
-      {
-        project_id: project.id,
-        email: email.toLowerCase(),
-        name: name ?? null,
-        status: 'pending',
-        source: 'changelog',
-        ip_hash: ipHash,
-      },
-      {
-        onConflict: 'project_id,email',
-        ignoreDuplicates: false,
-      }
-    )
-    .select('id, status, confirm_token, confirmed_at')
-    .single()
+    .select('id, email, status, confirmed_at, created_at')
+    .eq('project_id', project.id)
+    .is('unsubscribed_at', null)
+    .order('created_at', { ascending: false })
 
-  if (error) {
-    console.error('[Subscribe] DB error:', error.message)
-    return NextResponse.json({ error: 'Failed to process subscription' }, { status: 500 })
-  }
+  return NextResponse.json({
+    subscribers: (subs ?? []).map((s) => ({
+      id: s.id,
+      email: s.email,
+      status: s.status || 'pending',
+      joinedAt: new Date(s.created_at).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      }),
+      releasesSent: 0,
+    })),
+  })
+}
 
-  // Already confirmed  -  don't resend
-  if (subscriber.confirmed_at) {
-    return NextResponse.json({ status: 'already_subscribed' })
-  }
-
-  // Send confirmation email
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://ship-pulse.vercel.app'
-  const confirmUrl = `${appUrl}/api/public/confirm?token=${subscriber.confirm_token}`
-  const unsubscribeUrl = `${appUrl}/api/public/unsubscribe?token=${subscriber.confirm_token}`
-
+export async function POST(request: NextRequest) {
   try {
-    await sendSubscriberConfirmation({
-      to: email,
-      confirmUrl,
-      projectName: project.name,
-      unsubscribeUrl,
-    })
-  } catch (emailErr) {
-    if (emailErr instanceof Error && emailErr.name === 'EmailNotConfiguredError') {
-      // Email not configured  -  auto-confirm in development
-      if (process.env.NODE_ENV === 'development') {
-        await supabase
-          .from('shippulse_subscribers')
-          .update({ status: 'active', confirmed_at: new Date().toISOString() })
-          .eq('id', subscriber.id)
-        return NextResponse.json({ status: 'subscribed', note: 'Auto-confirmed (email not configured)' })
-      }
-      return NextResponse.json(
-        { error: 'Email confirmation is not available. Please contact the project owner.' },
-        { status: 503 }
-      )
-    }
-    console.error('[Subscribe] Email send failed:', emailErr instanceof Error ? emailErr.message : emailErr)
-    return NextResponse.json({ error: 'Failed to send confirmation email' }, { status: 500 })
-  }
+    const body = await request.json()
+    const { email, projectSlug } = body
 
-  return NextResponse.json({ status: 'confirmation_sent' })
+    if (!email || !projectSlug) {
+      return NextResponse.json({ error: 'email and projectSlug are required' }, { status: 400 })
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) {
+      return NextResponse.json({ error: 'Invalid email address' }, { status: 400 })
+    }
+
+    const serviceDb = createServiceClient()
+
+    const { data: project } = await serviceDb
+      .from('shippulse_projects')
+      .select('id')
+      .eq('slug', projectSlug)
+      .eq('is_public', true)
+      .is('deleted_at', null)
+      .maybeSingle()
+
+    if (!project) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+    }
+
+    const { error } = await serviceDb
+      .from('shippulse_subscribers')
+      .upsert(
+        {
+          project_id: project.id,
+          email: email.toLowerCase().trim(),
+          status: 'confirmed',
+          confirmed_at: new Date().toISOString(),
+        },
+        { onConflict: 'project_id,email', ignoreDuplicates: false }
+      )
+
+    if (error) {
+      console.error('[Subscribe] Error:', error.message)
+      return NextResponse.json({ error: 'Failed to subscribe' }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true, message: 'Subscribed successfully!' })
+  } catch (err: any) {
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
 }
