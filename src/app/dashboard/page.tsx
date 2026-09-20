@@ -9,21 +9,21 @@ export default async function DashboardRedirect() {
     redirect('/login?next=/dashboard')
   }
 
-  // Query the user's workspace membership and projects
   const serviceDb = createServiceClient()
+
+  // 1. Try via membership
   const { data: memberships } = await serviceDb
     .from('shippulse_memberships')
     .select('workspace_id')
     .eq('user_id', user.id)
-    .limit(1)
+    .limit(5)
 
-  const workspaceId = memberships?.[0]?.workspace_id
-
-  if (workspaceId) {
+  if (memberships && memberships.length > 0) {
+    const workspaceIds = memberships.map((m: any) => m.workspace_id)
     const { data: project } = await serviceDb
       .from('shippulse_projects')
       .select('slug')
-      .eq('workspace_id', workspaceId)
+      .in('workspace_id', workspaceIds)
       .is('deleted_at', null)
       .order('created_at', { ascending: true })
       .limit(1)
@@ -32,9 +32,25 @@ export default async function DashboardRedirect() {
     if (project?.slug) {
       redirect(`/${project.slug}/releases`)
     }
+
+    // Has workspace but no project yet (edge case) — go to onboarding to create first project
+    redirect('/onboarding')
   }
 
-  // If user has no workspaces or projects yet, direct them to onboarding
+  // 2. Fallback: check if user created projects directly (without memberships row — data integrity issue)
+  const { data: directProject } = await serviceDb
+    .from('shippulse_projects')
+    .select('slug')
+    .eq('created_by', user.id)
+    .is('deleted_at', null)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+
+  if (directProject?.slug) {
+    redirect(`/${directProject.slug}/releases`)
+  }
+
+  // 3. Truly new user: onboarding
   redirect('/onboarding')
 }
-

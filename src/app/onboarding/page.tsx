@@ -90,18 +90,26 @@ export default function OnboardingPage() {
   }, [])
 
   React.useEffect(() => {
-    // If the user is already registered and has projects, send them straight to dashboard
-    fetch('/api/projects')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (d?.projects && d.projects.length > 0) {
-          window.location.href = `/${d.projects[0].slug}/releases`
+    // If the user is already registered and has projects, send them straight to their dashboard.
+    // Check both: projects via membership AND projects created directly by the user.
+    const checkExistingUser = async () => {
+      try {
+        const res = await fetch('/api/projects')
+        if (res.ok) {
+          const d = await res.json()
+          if (d?.projects && d.projects.length > 0) {
+            window.location.replace(`/${d.projects[0].slug}/releases`)
+            return
+          }
         }
-      })
-      .catch(() => {})
-
+      } catch {
+        // continue to onboarding
+      }
+    }
+    checkExistingUser()
     fetchRepos()
   }, [fetchRepos])
+
 
   // Step 1: Workspace setup
   const handleWorkspaceSubmit = (e: React.FormEvent) => {

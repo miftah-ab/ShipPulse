@@ -19,29 +19,42 @@ export async function GET() {
 
     const serviceDb = createServiceClient()
 
-    // Get user's workspaces
+    // Get user's workspaces via memberships
     const { data: memberships } = await serviceDb
       .from('shippulse_memberships')
       .select('workspace_id')
       .eq('user_id', user.id)
 
-    if (!memberships || memberships.length === 0) {
-      return NextResponse.json({ projects: [] })
+    let projects: any[] | null = null
+
+    if (memberships && memberships.length > 0) {
+      const workspaceIds = memberships.map((m: any) => m.workspace_id)
+      const { data, error } = await serviceDb
+        .from('shippulse_projects')
+        .select('id, name, slug, description, is_public, created_at, workspace_id')
+        .in('workspace_id', workspaceIds)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: true })
+
+      if (error) {
+        console.error('[API /api/projects] Membership query error:', error.message)
+      } else {
+        projects = data
+      }
     }
 
-    const workspaceIds = memberships.map((m) => m.workspace_id)
+    // Fallback: if membership table has no rows (data gap from onboarding), find by created_by
+    if (!projects || projects.length === 0) {
+      const { data: directProjects, error: directErr } = await serviceDb
+        .from('shippulse_projects')
+        .select('id, name, slug, description, is_public, created_at, workspace_id')
+        .eq('created_by', user.id)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: true })
 
-    // Fetch projects
-    const { data: projects, error } = await serviceDb
-      .from('shippulse_projects')
-      .select('id, name, slug, description, is_public, created_at, workspace_id')
-      .in('workspace_id', workspaceIds)
-      .is('deleted_at', null)
-      .order('created_at', { ascending: true })
-
-    if (error) {
-      console.error('[API /api/projects] Error:', error.message)
-      return NextResponse.json({ error: 'Failed to fetch projects' }, { status: 500 })
+      if (!directErr && directProjects && directProjects.length > 0) {
+        projects = directProjects
+      }
     }
 
     return NextResponse.json({ projects: projects ?? [] })
@@ -50,6 +63,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
+
 
 export async function POST(request: NextRequest) {
   try {
