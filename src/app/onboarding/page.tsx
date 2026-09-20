@@ -41,6 +41,23 @@ export default function OnboardingPage() {
     syncStatus: 'idle', // 'idle' | 'syncing' | 'completed'
   })
 
+  // Real AI sync results & status
+  const [syncPhase, setSyncPhase] = useState('Connecting to GitHub…')
+  const [syncError, setSyncError] = useState<string | null>(null)
+  const [realCommits, setRealCommits] = useState<any[]>([])
+  const [commitsAnalyzedCount, setCommitsAnalyzedCount] = useState<number>(0)
+  const [generatedRelease, setGeneratedRelease] = useState<{
+    version: string
+    title: string
+    summary: string
+    content?: string
+    entries: Array<{
+      title: string
+      description: string
+      category: 'New' | 'Improved' | 'Fixed' | 'Security' | 'Performance' | 'Breaking' | 'Removed' | 'Other'
+    }>
+  } | null>(null)
+
   // GitHub Repositories for Step 3 Import Picker
   const [repos, setRepos] = useState<any[]>([])
   const [repoSearch, setRepoSearch] = useState('')
@@ -73,6 +90,16 @@ export default function OnboardingPage() {
   }, [])
 
   React.useEffect(() => {
+    // If the user is already registered and has projects, send them straight to dashboard
+    fetch('/api/projects')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.projects && d.projects.length > 0) {
+          window.location.href = `/${d.projects[0].slug}/releases`
+        }
+      })
+      .catch(() => {})
+
     fetchRepos()
   }, [fetchRepos])
 
@@ -94,22 +121,58 @@ export default function OnboardingPage() {
     setCurrentStep(3)
   }
 
+  // Step 4: Real Git sync & AI generation
+  const triggerRealAiSync = async (targetRepoUrl?: string, targetBranch?: string) => {
+    const urlToUse = targetRepoUrl || formData.repoUrl
+    const branchToUse = targetBranch || formData.repoBranch || 'main'
+    if (!urlToUse) return
+
+    setLoading(true)
+    setSyncError(null)
+    setFormData((prev) => ({ ...prev, syncStatus: 'syncing' }))
+    setSyncPhase('Connecting to GitHub & fetching repository commits…')
+
+    try {
+      const res = await fetch('/api/onboarding/ai-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          repoUrl: urlToUse,
+          repoBranch: branchToUse,
+          projectName: formData.projectName,
+          workspaceName: formData.workspaceName,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        if (data.needsConnect) {
+          window.location.href = '/api/github/connect'
+          return
+        }
+        throw new Error(data.error || 'Failed to sync with repository')
+      }
+
+      setRealCommits(data.recentCommits || [])
+      setCommitsAnalyzedCount(data.commitCount || 0)
+      setGeneratedRelease(data.release)
+      setFormData((prev) => ({ ...prev, syncStatus: 'completed' }))
+    } catch (err: any) {
+      console.error('Real sync error:', err)
+      setSyncError(err.message || 'Failed to sync repository.')
+      setFormData((prev) => ({ ...prev, syncStatus: 'idle' }))
+    } finally {
+      setLoading(false)
+    }
+  }
+
   // Step 3: Connect repository
   const handleRepoSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!formData.repoUrl) return
     setCurrentStep(4)
-    startSyncSimulation()
-  }
-
-  // Step 4: First Git sync & AI generation
-  const startSyncSimulation = () => {
-    setLoading(true)
-    setFormData((prev) => ({ ...prev, syncStatus: 'syncing' }))
-    setTimeout(() => {
-      setLoading(false)
-      setFormData((prev) => ({ ...prev, syncStatus: 'completed' }))
-    }, 2000)
+    triggerRealAiSync(formData.repoUrl, formData.repoBranch || 'main')
   }
 
   // Copy widget embed snippet
@@ -140,13 +203,14 @@ export default function OnboardingPage() {
           projectSlug: formData.projectSlug,
           repoUrl: formData.repoUrl,
           repoBranch: formData.repoBranch,
+          initialRelease: generatedRelease,
         }),
       })
 
       if (res.ok) {
         const data = await res.json()
         if (data.project?.slug) {
-          router.push(`/${data.project.slug}/releases`)
+          window.location.href = `/${data.project.slug}/releases`
           return
         }
       }
@@ -157,9 +221,9 @@ export default function OnboardingPage() {
     }
 
     if (formData.projectSlug) {
-      router.push(`/${formData.projectSlug}/releases`)
+      window.location.href = `/${formData.projectSlug}/releases`
     } else {
-      router.push('/dashboard')
+      window.location.href = '/dashboard'
     }
   }
 
@@ -176,7 +240,7 @@ export default function OnboardingPage() {
     <div className="min-h-screen bg-[#0A0D14] text-slate-100 flex flex-col items-center justify-between p-4 sm:p-8 relative">
       {/* Header */}
       <header className="w-full max-w-4xl flex items-center justify-between py-4">
-        <Link href="/" className="flex items-center gap-2">
+        <Link href="/dashboard" className="flex items-center gap-2">
           <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center">
             <Sparkles className="h-4 w-4 text-white" />
           </div>
@@ -416,13 +480,15 @@ export default function OnboardingPage() {
                           size="sm"
                           variant={isSelected ? 'secondary' : 'glow'}
                           onClick={() => {
+                            const url = repo.url
+                            const branch = repo.defaultBranch || 'main'
                             setFormData((prev) => ({
                               ...prev,
-                              repoUrl: repo.url,
-                              repoBranch: repo.defaultBranch || 'main',
+                              repoUrl: url,
+                              repoBranch: branch,
                             }))
                             setCurrentStep(4)
-                            startSyncSimulation()
+                            triggerRealAiSync(url, branch)
                           }}
                           className="h-7 text-xs shrink-0 px-3 font-semibold"
                         >
@@ -454,11 +520,11 @@ export default function OnboardingPage() {
           </Card>
         )}
 
-        {/* STEP 4: FIRST AI SYNC */}
+        {/* STEP 4: REAL AI SYNC */}
         {currentStep === 4 && (
           <Card className="border-slate-800 bg-slate-900/80 backdrop-blur-xl text-center">
             <CardHeader>
-              <CardTitle className="text-xl">Running First AI Sync</CardTitle>
+              <CardTitle className="text-xl">Running Real AI Sync</CardTitle>
               <CardDescription className="text-xs text-slate-400">
                 Clustering commits, filtering internal chores, and drafting your inaugural release.
               </CardDescription>
@@ -467,20 +533,57 @@ export default function OnboardingPage() {
               {formData.syncStatus === 'syncing' ? (
                 <div className="py-8 flex flex-col items-center gap-3">
                   <RefreshCw className="h-8 w-8 text-indigo-400 animate-spin" />
-                  <p className="text-sm font-medium text-slate-300">
-                    Groq LLM cluster analyzing recent repository activity...
+                  <p className="text-sm font-medium text-slate-200">
+                    {syncPhase}
+                  </p>
+                  <p className="text-xs text-slate-500 font-mono">
+                    {formData.repoUrl} ({formData.repoBranch})
                   </p>
                 </div>
-              ) : (
+              ) : syncError ? (
                 <div className="py-6 flex flex-col items-center gap-3">
+                  <div className="p-3 text-xs rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 max-w-md text-left">
+                    {syncError}
+                  </div>
+                  <div className="flex gap-3 mt-2">
+                    <Button variant="outline" size="sm" onClick={() => setCurrentStep(3)}>
+                      Choose Another Repo
+                    </Button>
+                    <Button variant="glow" size="sm" onClick={() => triggerRealAiSync()}>
+                      Retry Sync
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="py-6 flex flex-col items-center gap-4">
                   <CheckCircle2 className="h-10 w-10 text-emerald-400" />
                   <div>
                     <h4 className="text-base font-semibold text-white">First Release Draft Ready!</h4>
-                    <p className="text-xs text-slate-400 mt-1">
-                      Synthesized 14 commits into 3 customer-facing product enhancements.
+                    <p className="text-xs text-slate-300 mt-1">
+                      Synthesized <strong className="text-indigo-400">{commitsAnalyzedCount} commits</strong> into{' '}
+                      <strong className="text-emerald-400">{generatedRelease?.entries?.length || 0} customer-facing product enhancements</strong>.
                     </p>
                   </div>
-                  <Button variant="glow" onClick={() => setCurrentStep(5)} className="mt-4 flex items-center gap-2">
+
+                  {realCommits.length > 0 && (
+                    <div className="w-full text-left bg-slate-950/70 border border-slate-800/80 rounded-xl p-3.5 space-y-2">
+                      <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                        Recent Commits Ingested from GitHub:
+                      </p>
+                      <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                        {realCommits.map((c, i) => (
+                          <div key={i} className="flex items-center gap-2 text-xs font-mono text-slate-300">
+                            <span className="text-indigo-400 bg-indigo-950/50 px-1.5 py-0.5 rounded text-[10px] border border-indigo-500/20 shrink-0">
+                              {c.sha}
+                            </span>
+                            <span className="truncate text-slate-300 font-sans text-xs">{c.message}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <Button variant="glow" onClick={() => setCurrentStep(5)} className="mt-2 flex items-center gap-2">
                     <span>Preview Release</span>
                     <ArrowRight className="h-4 w-4" />
                   </Button>
@@ -490,7 +593,7 @@ export default function OnboardingPage() {
           </Card>
         )}
 
-        {/* STEP 5: PREVIEW INITIAL RELEASE */}
+        {/* STEP 5: PREVIEW REAL INITIAL RELEASE */}
         {currentStep === 5 && (
           <Card className="border-slate-800 bg-slate-900/80 backdrop-blur-xl">
             <CardHeader>
@@ -501,30 +604,68 @@ export default function OnboardingPage() {
                     This is how your updates will appear to your end users.
                   </CardDescription>
                 </div>
-                <Badge variant="feature">Generated</Badge>
+                <Badge variant="feature">AI Generated</Badge>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
-                <h4 className="text-sm font-bold text-white">v1.0.0  -  Launch of {formData.projectName || 'New Service'}</h4>
-                <p className="text-xs text-slate-300 leading-relaxed">
-                  We are excited to unveil our core platform features, enhanced performance optimizations, and full API integration.
-                </p>
-                <div className="space-y-2 pt-2 border-t border-slate-800/80">
-                  <div className="flex items-start gap-2">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 mt-0.5 shrink-0" />
-                    <p className="text-xs text-slate-300">
-                      <strong>Core Engine:</strong> High throughput processing pipeline with sub-second response times.
-                    </p>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 mt-0.5 shrink-0" />
-                    <p className="text-xs text-slate-300">
-                      <strong>Modern API:</strong> Comprehensive endpoints with developer-friendly documentation.
-                    </p>
-                  </div>
+                <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
+                  <h4 className="text-sm font-bold text-white">
+                    {generatedRelease?.title || `v1.0.0 - Launch of ${formData.projectName || 'New Service'}`}
+                  </h4>
+                  <span className="text-xs font-mono text-indigo-400 bg-indigo-950/60 px-2 py-0.5 rounded border border-indigo-500/30 shrink-0">
+                    {generatedRelease?.version || 'v1.0.0'}
+                  </span>
                 </div>
+
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  {generatedRelease?.summary ||
+                    'We are excited to unveil our core platform features, enhanced performance optimizations, and full API integration.'}
+                </p>
+
+                {generatedRelease?.entries && generatedRelease.entries.length > 0 ? (
+                  <div className="space-y-2.5 pt-2 border-t border-slate-800/80">
+                    {generatedRelease.entries.map((entry, idx) => (
+                      <div key={idx} className="flex items-start gap-2.5">
+                        <Badge
+                          variant={
+                            entry.category === 'New'
+                              ? 'feature'
+                              : entry.category === 'Fixed'
+                              ? 'fix'
+                              : entry.category === 'Performance'
+                              ? 'perf'
+                              : entry.category === 'Security'
+                              ? 'security'
+                              : entry.category === 'Breaking'
+                              ? 'breaking'
+                              : 'secondary'
+                          }
+                          className="text-[10px] shrink-0 mt-0.5"
+                        >
+                          {entry.category}
+                        </Badge>
+                        <div className="space-y-0.5">
+                          <p className="text-xs font-semibold text-white">{entry.title}</p>
+                          {entry.description && (
+                            <p className="text-[11px] text-slate-400 leading-normal">{entry.description}</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-2 pt-2 border-t border-slate-800/80">
+                    <div className="flex items-start gap-2">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 mt-0.5 shrink-0" />
+                      <p className="text-xs text-slate-300">
+                        <strong>Core Engine:</strong> High throughput processing pipeline with sub-second response times.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
+
               <div className="flex items-center justify-between gap-3 mt-4">
                 <Button type="button" variant="outline" onClick={() => setCurrentStep(4)}>
                   <ArrowLeft className="h-4 w-4 mr-1" />

@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // ShipPulse  -  OpenRouter Provider (Fallback)
 // ============================================================
 
@@ -20,13 +20,18 @@ function resolveOpenRouterModel(requested: string): string {
 export class OpenRouterProvider implements AIProvider {
   name = 'openrouter'
 
-  constructor() {
-    if (!process.env.OPENROUTER_API_KEY) {
-      throw new Error('OPENROUTER_API_KEY environment variable is not set')
-    }
+  constructor() {}
+
+  async isAvailable(): Promise<boolean> {
+    const key = process.env.OPENROUTER_API_KEY
+    return Boolean(key && !key.includes('your_openrouter_api_key'))
   }
 
   async generate(request: AIGenerateRequest): Promise<AIProviderResult> {
+    const key = process.env.OPENROUTER_API_KEY
+    if (!key || key.includes('your_openrouter_api_key')) {
+      throw new Error('OPENROUTER_API_KEY environment variable is not configured')
+    }
     const model = resolveOpenRouterModel(request.model)
     const startTime = Date.now()
 
@@ -72,17 +77,5 @@ export class OpenRouterProvider implements AIProvider {
       success: true,
     }
   }
-
-  async isAvailable(): Promise<boolean> {
-    try {
-      const response = await fetch('https://openrouter.ai/api/v1/models', {
-        headers: {
-          'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        },
-      })
-      return response.ok
-    } catch {
-      return false
-    }
-  }
 }
+

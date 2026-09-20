@@ -72,7 +72,38 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Redirect to onboarding if first time, otherwise dashboard
-  const redirectTo = next.startsWith('/') ? next : '/dashboard'
+  // ── Redirect user ──────────────────────────────────────────
+  // If user already has an active workspace/project, redirect directly to dashboard releases
+  if (userId) {
+    try {
+      const serviceClient = createServiceClient()
+      const { data: memberships } = await serviceClient
+        .from('shippulse_memberships')
+        .select('workspace_id')
+        .eq('user_id', userId)
+        .limit(1)
+
+      if (memberships && memberships.length > 0) {
+        const { data: project } = await serviceClient
+          .from('shippulse_projects')
+          .select('slug')
+          .eq('workspace_id', memberships[0].workspace_id)
+          .is('deleted_at', null)
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle()
+
+        if (project?.slug) {
+          return NextResponse.redirect(`${origin}/${project.slug}/releases`)
+        }
+        return NextResponse.redirect(`${origin}/dashboard`)
+      }
+    } catch (checkErr: any) {
+      console.warn('[Auth] Error checking existing projects:', checkErr.message)
+    }
+  }
+
+  // First time user with no workspace yet: send to onboarding
+  const redirectTo = next && next !== '/dashboard' ? next : '/onboarding'
   return NextResponse.redirect(`${origin}${redirectTo}`)
 }

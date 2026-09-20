@@ -413,10 +413,31 @@ function buildResponse(
   usedFallback: boolean,
   fallbackReason?: string
 ): AIGenerateResponse {
+  let parsed: any = undefined
+  if (result.content) {
+    try {
+      const clean = result.content.trim()
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/\s*```$/, '')
+        .trim()
+      parsed = JSON.parse(clean)
+    } catch {
+      const match = result.content.match(/\{[\s\S]*\}/)
+      if (match) {
+        try {
+          parsed = JSON.parse(match[0])
+        } catch {
+          // ignore parse failure
+        }
+      }
+    }
+  }
+
   return {
     ...result,
     usedFallback,
     fallbackReason,
+    parsed,
   }
 }
 

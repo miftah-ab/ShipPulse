@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import React, { useState } from 'react'
 import Link from 'next/link'
@@ -77,30 +77,6 @@ export default function LoginPage() {
               </svg>
               <span>{loading ? 'Redirecting to GitHub…' : 'Continue with GitHub'}</span>
             </Button>
-
-            {/* Divider + trust note */}
-            <div className="flex items-center gap-3">
-              <div className="h-px flex-1 bg-slate-800" />
-              <p className="text-[11px] text-slate-500 whitespace-nowrap">OAuth only — we never store your password</p>
-              <div className="h-px flex-1 bg-slate-800" />
-            </div>
-
-            {/* Permissions list */}
-            <div className="rounded-lg bg-slate-950/60 border border-slate-800 p-3 space-y-1.5">
-              <p className="text-[11px] font-medium text-slate-400">ShipPulse requests access to:</p>
-              <ul className="space-y-1">
-                {[
-                  'Read your public profile & email',
-                  'List repositories (public & private)',
-                  'Read commits, tags, and pull requests',
-                ].map((item) => (
-                  <li key={item} className="flex items-center gap-2 text-[11px] text-slate-500">
-                    <div className="h-1.5 w-1.5 rounded-full bg-indigo-500 shrink-0" />
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
           </CardContent>
         </Card>
 

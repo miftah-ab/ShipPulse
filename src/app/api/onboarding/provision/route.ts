@@ -24,6 +24,7 @@ export async function POST(request: NextRequest) {
       projectSlug,
       repoUrl,
       repoBranch = 'main',
+      initialRelease,
     } = body
 
     const serviceDb = createServiceClient()
@@ -83,16 +84,68 @@ export async function POST(request: NextRequest) {
     if (repoUrl) {
       try {
         await serviceDb
-          .from('shippulse_repos')
+          .from('shippulse_repositories')
           .insert({
             workspace_id: workspace.id,
-            project_id: project.id,
-            repo_url: repoUrl,
+            github_repo_id: Date.now(),
+            full_name: repoUrl.replace(/https?:\/\/github\.com\//, ''),
+            name: projectName,
+            owner: workspace.name,
+            url: repoUrl,
             default_branch: repoBranch,
-            status: 'active',
           })
       } catch (e: any) {
         console.warn('[Provision] Repo record error:', e)
+      }
+    }
+
+    // 5. If initialRelease provided, persist as real draft release
+    let createdRelease = null
+    if (initialRelease) {
+      try {
+        const releaseSlug = (initialRelease.title || 'initial-release')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '')
+          .slice(0, 60) || 'v1-0-0'
+        const finalReleaseSlug = `${releaseSlug}-${Date.now().toString(36)}`
+
+        const { data: releaseRow, error: rErr } = await serviceDb
+          .from('shippulse_releases')
+          .insert({
+            project_id: project.id,
+            workspace_id: workspace.id,
+            title: initialRelease.title || 'Inaugural Release',
+            slug: finalReleaseSlug,
+            summary: initialRelease.summary || '',
+            content: initialRelease.content || initialRelease.summary || '',
+            version: initialRelease.version || 'v1.0.0',
+            status: 'draft',
+            is_ai_generated: true,
+            output_mode: 'customer',
+            created_by: user.id,
+          })
+          .select()
+          .single()
+
+        if (rErr) {
+          console.warn('[Provision] Release insert error:', rErr.message)
+        } else if (releaseRow) {
+          createdRelease = releaseRow
+          if (Array.isArray(initialRelease.entries) && initialRelease.entries.length > 0) {
+            const entryInserts = initialRelease.entries.map((entry: any, idx: number) => ({
+              release_id: releaseRow.id,
+              project_id: project.id,
+              title: entry.title || 'Enhancement',
+              description: entry.description || '',
+              is_ai_generated: true,
+              sort_order: idx,
+            }))
+            await serviceDb.from('shippulse_release_entries').insert(entryInserts)
+          }
+        }
+      } catch (relErr: any) {
+        console.warn('[Provision] Initial release persistence warning:', relErr.message)
       }
     }
 
@@ -100,6 +153,7 @@ export async function POST(request: NextRequest) {
       success: true,
       workspace,
       project,
+      release: createdRelease,
     }, { status: 201 })
   } catch (err: any) {
     console.error('[API /api/onboarding/provision] Error:', err.message)

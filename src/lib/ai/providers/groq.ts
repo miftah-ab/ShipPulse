@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // ShipPulse  -  Groq Provider
 // Implements AIProvider interface using the Groq SDK
 // ============================================================
@@ -22,18 +22,23 @@ function resolveGroqModel(requested: string): GroqModel {
 
 export class GroqProvider implements AIProvider {
   name = 'groq'
-  private client: Groq
+  private client: Groq | null = null
 
   constructor() {
-    if (!process.env.GROQ_API_KEY) {
-      throw new Error('GROQ_API_KEY environment variable is not set')
+    const key = process.env.GROQ_API_KEY
+    if (key && !key.includes('your_groq_api_key')) {
+      try {
+        this.client = new Groq({ apiKey: key })
+      } catch (err) {
+        console.warn('[GroqProvider] Failed to initialize client:', err)
+      }
     }
-    this.client = new Groq({
-      apiKey: process.env.GROQ_API_KEY,
-    })
   }
 
   async generate(request: AIGenerateRequest): Promise<AIProviderResult> {
+    if (!this.client) {
+      throw new Error('GROQ_API_KEY environment variable is not configured or is a placeholder')
+    }
     const model = resolveGroqModel(request.model)
     const startTime = Date.now()
 
@@ -81,6 +86,7 @@ export class GroqProvider implements AIProvider {
   }
 
   async isAvailable(): Promise<boolean> {
+    if (!this.client) return false
     try {
       await this.client.models.list()
       return true

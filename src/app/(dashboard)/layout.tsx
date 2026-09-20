@@ -20,6 +20,7 @@ import {
   FolderGit2
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { createClient } from '@/lib/supabase/client'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -27,6 +28,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const projectSlug = (params?.projectSlug as string) || ''
   const [projectMenuOpen, setProjectMenuOpen] = useState(false)
   const [userProjects, setUserProjects] = useState<any[]>([])
+  const [currentUser, setCurrentUser] = useState<{
+    name: string
+    email: string
+    avatarUrl?: string
+    login?: string
+  } | null>(null)
 
   React.useEffect(() => {
     // Fetch real projects for the current user/workspace
@@ -38,7 +45,41 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         }
       })
       .catch(() => {})
+
+    // Fetch real authenticated user profile
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        const meta = user.user_metadata || {}
+        const name =
+          meta.full_name ||
+          meta.name ||
+          meta.user_name ||
+          meta.login ||
+          user.email?.split('@')[0] ||
+          'Developer'
+        const login = meta.user_name || meta.login || ''
+        const avatarUrl = meta.avatar_url || ''
+        setCurrentUser({
+          name,
+          email: user.email || '',
+          avatarUrl,
+          login,
+        })
+      }
+    })
   }, [])
+
+  const handleLogout = async () => {
+    try {
+      const supabase = createClient()
+      await supabase.auth.signOut()
+    } catch (err) {
+      console.error('Logout error:', err)
+    } finally {
+      window.location.href = '/login'
+    }
+  }
 
   const navItems = [
     { name: 'Releases', href: `/${projectSlug}/releases`, icon: Layers },
@@ -155,18 +196,34 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </Link>
 
           <div className="flex items-center justify-between pt-2">
-            <div className="flex items-center gap-2">
-              <div className="h-7 w-7 rounded-full bg-slate-800 border border-slate-750 flex items-center justify-center text-xs font-bold text-slate-200">
-                U
-              </div>
+            <div className="flex items-center gap-2.5 overflow-hidden">
+              {currentUser?.avatarUrl ? (
+                <img
+                  src={currentUser.avatarUrl}
+                  alt={currentUser.name}
+                  className="h-8 w-8 rounded-full border border-slate-700 object-cover shrink-0"
+                />
+              ) : (
+                <div className="h-8 w-8 rounded-full bg-gradient-to-br from-indigo-600 to-violet-700 border border-indigo-500/30 flex items-center justify-center text-xs font-bold text-white shrink-0">
+                  {currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : 'U'}
+                </div>
+              )}
               <div className="overflow-hidden">
-                <p className="text-xs font-medium text-slate-200 truncate">Workspace User</p>
-                <p className="text-[10px] text-slate-500">Pro Member</p>
+                <p className="text-xs font-semibold text-slate-200 truncate">
+                  {currentUser?.name || 'Developer'}
+                </p>
+                <p className="text-[10px] text-slate-400 truncate">
+                  {currentUser?.login ? `@${currentUser.login}` : currentUser?.email || 'Logged In'}
+                </p>
               </div>
             </div>
-            <Link href="/login" className="text-slate-500 hover:text-slate-300 p-1">
+            <button
+              onClick={handleLogout}
+              title="Sign Out"
+              className="text-slate-400 hover:text-rose-400 hover:bg-slate-900 p-1.5 rounded-lg transition-colors shrink-0"
+            >
               <LogOut className="h-4 w-4" />
-            </Link>
+            </button>
           </div>
         </div>
       </aside>
@@ -193,6 +250,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <span>New Release</span>
               </Button>
             </Link>
+
+            <button
+              onClick={handleLogout}
+              className="h-8 px-2.5 rounded-lg border border-slate-800 bg-slate-900/60 hover:bg-slate-800 text-slate-400 hover:text-rose-400 flex items-center gap-1.5 text-xs transition-colors"
+              title="Sign Out"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Logout</span>
+            </button>
           </div>
         </header>
 
