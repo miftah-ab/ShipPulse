@@ -1,10 +1,3 @@
-// ============================================================
-// GET /api/admin/migrate
-// ONE-TIME: Applies pending migrations via Supabase SDK
-// Protected by ADMIN_SECRET env var
-// DELETE THIS ROUTE after running once in production.
-// ============================================================
-
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 
@@ -21,20 +14,23 @@ export async function GET(request: NextRequest) {
   const serviceClient = createServiceClient()
 
   // Migration 003: Add github_access_token columns to shippulse_users
-  // Supabase JS client cannot run raw DDL directly — we use the postgres extension
-  // via a stored procedure. Instead, we verify by checking if column exists via
-  // information_schema, and if not, instruct user to run manually.
   const { data: cols } = await serviceClient
     .from('information_schema.columns' as any)
     .select('column_name')
     .eq('table_schema', 'public')
     .eq('table_name', 'shippulse_users')
-    .in('column_name', ['github_access_token', 'github_token_scope', 'github_token_updated'])
+    .in('column_name', [
+      'github_access_token',
+      'github_token_scope',
+      'github_token_updated',
+    ])
 
-  const existing = (cols as any[])?.map((c: any) => c.column_name) ?? []
-  const missing = ['github_access_token', 'github_token_scope', 'github_token_updated'].filter(
-    (c) => !existing.includes(c)
-  )
+  const existing = ((cols as any[]) || []).map((c: any) => c.column_name) ?? []
+  const missing = [
+    'github_access_token',
+    'github_token_scope',
+    'github_token_updated',
+  ].filter((c) => !existing.includes(c))
 
   if (missing.length === 0) {
     return NextResponse.json({
