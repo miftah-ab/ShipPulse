@@ -45,14 +45,25 @@ export default function OnboardingPage() {
   const [repos, setRepos] = useState<any[]>([])
   const [repoSearch, setRepoSearch] = useState('')
   const [loadingRepos, setLoadingRepos] = useState(false)
+  const [needsGitHubConnect, setNeedsGitHubConnect] = useState(false)
+  const [repoMessage, setRepoMessage] = useState('')
 
-  const fetchRepos = React.useCallback(async () => {
+  const fetchRepos = React.useCallback(async (query?: string) => {
     try {
       setLoadingRepos(true)
-      const res = await fetch('/api/github/repos')
+      setNeedsGitHubConnect(false)
+      const url = query ? `/api/github/repos?q=${encodeURIComponent(query)}` : '/api/github/repos'
+      const res = await fetch(url)
       if (res.ok) {
         const data = await res.json()
-        setRepos(data.repositories || [])
+        if (data.needsConnect) {
+          setNeedsGitHubConnect(true)
+          setRepoMessage(data.message || 'Connect your GitHub account to import repositories.')
+          setRepos([])
+        } else {
+          setRepos(data.repositories || [])
+          setRepoMessage('')
+        }
       }
     } catch {
       // Keep defaults
@@ -343,7 +354,7 @@ export default function OnboardingPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={fetchRepos}
+                  onClick={() => fetchRepos(repoSearch || undefined)}
                   className="h-9 px-3 rounded-lg border border-slate-750 bg-slate-950 hover:bg-slate-900 text-xs text-slate-400 hover:text-white flex items-center gap-1.5 transition-colors"
                   title="Refresh repository list"
                 >
@@ -353,13 +364,22 @@ export default function OnboardingPage() {
 
               {/* Repositories List */}
               <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
+                {/* Connect GitHub CTA */}
+                {needsGitHubConnect && !loadingRepos && (
+                  <div className="p-6 text-center border border-dashed border-indigo-800/60 rounded-xl space-y-3 bg-indigo-950/20">
+                    <GitBranch className="h-8 w-8 text-indigo-400 mx-auto" />
+                    <p className="text-xs text-slate-300 font-medium">{repoMessage}</p>
+                    <a
+                      href="/api/github/connect?next=/onboarding"
+                      className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors"
+                    >
+                      <GitBranch className="h-3.5 w-3.5" />
+                      Connect GitHub Account
+                    </a>
+                  </div>
+                )}
+
                 {repos
-                  .filter(
-                    (r) =>
-                      !repoSearch ||
-                      r.name.toLowerCase().includes(repoSearch.toLowerCase()) ||
-                      r.fullName.toLowerCase().includes(repoSearch.toLowerCase())
-                  )
                   .map((repo) => {
                     const isSelected = formData.repoUrl === repo.url
                     return (
@@ -412,9 +432,9 @@ export default function OnboardingPage() {
                     )
                   })}
 
-                {repos.length === 0 && !loadingRepos && (
+                {repos.length === 0 && !loadingRepos && !needsGitHubConnect && (
                   <div className="p-8 text-center border border-dashed border-slate-800 rounded-xl text-xs text-slate-500">
-                    No repositories found matching your search.
+                    {repoSearch ? `No repositories matching "${repoSearch}".` : 'No repositories found.'}
                   </div>
                 )}
               </div>

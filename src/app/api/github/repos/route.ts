@@ -5,7 +5,7 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { createGitHubClient, listUserRepositories } from '@/lib/github/service'
 
 export async function GET(request: NextRequest) {
@@ -20,14 +20,28 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const query = searchParams.get('q')?.toLowerCase() || ''
 
-    // Fetch live repositories from GitHub via OAuth token
-    const { data: { session } } = await supabase.auth.getSession()
-    const providerToken = session?.provider_token
+    // ── Fetch the persisted GitHub token from the database ───────
+    // Supabase only exposes provider_token immediately after OAuth exchange.
+    // We stored it in shippulse_users.github_access_token at callback time.
+    const serviceClient = createServiceClient()
+    const { data: userRow, error: userErr } = await serviceClient
+      .from('shippulse_users')
+      .select('github_access_token')
+      .eq('id', user.id)
+      .single()
+
+    if (userErr) {
+      console.error('[GitHub Repos] DB error fetching token:', userErr.message)
+    }
+
+    const providerToken = userRow?.github_access_token ?? null
 
     if (!providerToken) {
-      // No GitHub OAuth token — return empty list; user needs to connect GitHub
+      // No GitHub OAuth token — user needs to re-connect GitHub
       return NextResponse.json({
         repositories: [],
+        needsConnect: true,
+        connectUrl: '/api/github/connect',
         message: 'Connect your GitHub account to import repositories.',
       })
     }
@@ -60,6 +74,22 @@ export async function GET(request: NextRequest) {
       })
     } catch (err: any) {
       console.error('[GitHub Repos] Error fetching repositories:', err.message)
+
+      // If 401 — token is revoked/expired; clear it so UI shows reconnect
+      if (err.status === 401) {
+        await serviceClient
+          .from('shippulse_users')
+          .update({ github_access_token: null, github_token_updated: new Date().toISOString() })
+          .eq('id', user.id)
+
+        return NextResponse.json({
+          repositories: [],
+          needsConnect: true,
+          connectUrl: '/api/github/connect',
+          message: 'Your GitHub connection has expired. Please re-connect.',
+        })
+      }
+
       return NextResponse.json(
         { error: 'Failed to fetch repositories from GitHub. Please re-connect your account.' },
         { status: 502 }
