@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Script from 'next/script'
 import './globals.css'
 import { Toaster } from '@/components/ui/toaster'
 import { Analytics } from '@vercel/analytics/next'
@@ -76,6 +77,11 @@ export default function RootLayout({
         {children}
         <Toaster />
         <Analytics />
+        <Script
+          src="/widget.js"
+          data-project="shippulse"
+          strategy="afterInteractive"
+        />
       </body>
     </html>
   )

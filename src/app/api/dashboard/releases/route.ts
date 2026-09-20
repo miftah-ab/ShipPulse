@@ -23,20 +23,54 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'projectSlug is required' }, { status: 400 })
     }
 
-    // Lookup project and ensure user has workspace membership
     const serviceDb = createServiceClient()
-    const { data: project, error: pErr } = await serviceDb
+
+    // 1. Lookup project with fallback matching
+    let { data: project } = await serviceDb
       .from('shippulse_projects')
       .select('id, workspace_id, name, slug')
       .eq('slug', projectSlug)
       .is('deleted_at', null)
       .maybeSingle()
 
-    if (pErr || !project) {
+    if (!project) {
+      const { data: matched } = await serviceDb
+        .from('shippulse_projects')
+        .select('id, workspace_id, name, slug')
+        .ilike('slug', `${projectSlug}%`)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      project = matched
+    }
+
+    if (!project) {
+      // Check user workspaces for any project
+      const { data: userMemberships } = await serviceDb
+        .from('shippulse_memberships')
+        .select('workspace_id')
+        .eq('user_id', user.id)
+
+      if (userMemberships && userMemberships.length > 0) {
+        const workspaceIds = userMemberships.map((m: any) => m.workspace_id)
+        const { data: anyProj } = await serviceDb
+          .from('shippulse_projects')
+          .select('id, workspace_id, name, slug')
+          .in('workspace_id', workspaceIds)
+          .is('deleted_at', null)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        project = anyProj
+      }
+    }
+
+    if (!project) {
       return NextResponse.json({ error: 'Project not found' }, { status: 404 })
     }
 
-    // Verify membership
+    // 2. Verify membership
     const { data: membership } = await serviceDb
       .from('shippulse_memberships')
       .select('role')
@@ -48,8 +82,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Access denied to this workspace' }, { status: 403 })
     }
 
-    // Fetch real releases
-    const { data: releases, error: rErr } = await serviceDb
+    // 3. Fetch real releases with join, fallback to direct query if join fails
+    let releases: any[] | null = null
+    const { data: joinedReleases, error: rErr } = await serviceDb
       .from('shippulse_releases')
       .select(`
         id, title, slug, summary, version, status,
@@ -63,14 +98,32 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false })
 
     if (rErr) {
-      console.error('[Dashboard Releases] Query error:', rErr.message)
-      return NextResponse.json({ error: 'Failed to fetch releases' }, { status: 500 })
+      console.warn('[Dashboard Releases] Joined query failed, falling back to direct query:', rErr.message)
+      const { data: directReleases, error: directErr } = await serviceDb
+        .from('shippulse_releases')
+        .select(`
+          id, title, slug, summary, version, status,
+          published_at, created_at, updated_at, tags,
+          views_count, reactions_count, feedback_count,
+          category_id
+        `)
+        .eq('project_id', project.id)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+
+      if (directErr) {
+        console.error('[Dashboard Releases] Direct query failed:', directErr.message)
+        return NextResponse.json({ error: 'Failed to fetch releases: ' + directErr.message }, { status: 500 })
+      }
+      releases = directReleases
+    } else {
+      releases = joinedReleases
     }
 
     return NextResponse.json({ releases: releases ?? [] })
   } catch (err: any) {
     console.error('[Dashboard Releases] Error:', err.message)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error: ' + (err.message || 'Unknown') }, { status: 500 })
   }
 }
 

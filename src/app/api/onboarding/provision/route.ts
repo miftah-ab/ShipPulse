@@ -38,6 +38,7 @@ export async function POST(request: NextRequest) {
       .insert({
         name: workspaceName,
         slug: finalWSlug,
+        created_by: user.id,
       })
       .select()
       .single()
@@ -71,6 +72,8 @@ export async function POST(request: NextRequest) {
         name: projectName,
         slug: finalPSlug,
         is_public: true,
+        repo_url: repoUrl || null,
+        default_branch: repoBranch || 'main',
       })
       .select()
       .single()
@@ -83,17 +86,31 @@ export async function POST(request: NextRequest) {
     // 4. If repoUrl provided, link git repo integration
     if (repoUrl) {
       try {
-        await serviceDb
+        const repoFullName = repoUrl.replace(/https?:\/\/github\.com\//, '').replace(/\.git$/, '')
+        const { data: repoRecord } = await serviceDb
           .from('shippulse_repositories')
           .insert({
             workspace_id: workspace.id,
             github_repo_id: Date.now(),
-            full_name: repoUrl.replace(/https?:\/\/github\.com\//, ''),
-            name: projectName,
-            owner: workspace.name,
+            full_name: repoFullName,
+            name: repoFullName.split('/')[1] || projectName,
+            owner: repoFullName.split('/')[0] || workspace.name,
             url: repoUrl,
-            default_branch: repoBranch,
+            default_branch: repoBranch || 'main',
           })
+          .select()
+          .single()
+
+        if (repoRecord && project) {
+          await serviceDb
+            .from('shippulse_repository_connections')
+            .insert({
+              project_id: project.id,
+              repository_id: repoRecord.id,
+              branch: repoBranch || 'main',
+              is_active: true,
+            })
+        }
       } catch (e: any) {
         console.warn('[Provision] Repo record error:', e)
       }

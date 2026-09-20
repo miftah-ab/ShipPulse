@@ -41,12 +41,13 @@ export default function ReleasesPage() {
           window.location.href = '/login'
           return
         }
-        throw new Error('Failed to fetch project releases')
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error || 'Failed to fetch project releases')
       }
       const data = await res.json()
       setReleases(data.releases || [])
     } catch (err: any) {
-      setError('Unable to load releases. Please try again.')
+      setError(err?.message || 'Unable to load releases. Please try again.')
     } finally {
       setLoading(false)
     }

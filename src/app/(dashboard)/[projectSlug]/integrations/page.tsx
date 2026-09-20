@@ -30,6 +30,9 @@ export default function IntegrationsPage() {
   const [lastSync, setLastSync] = useState<string>('Never')
   const [showPickerModal, setShowPickerModal] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [manualRepoUrl, setManualRepoUrl] = useState('')
+  const [importingRepo, setImportingRepo] = useState(false)
+  const [modalError, setModalError] = useState<string | null>(null)
   const [repos, setRepos] = useState<any[]>([])
   const [reposLoading, setReposLoading] = useState(false)
   const [reposError, setReposError] = useState<string | null>(null)
@@ -110,28 +113,43 @@ export default function IntegrationsPage() {
     }
   }
 
-  const handleImportRepo = async (repo: any) => {
+  const handleImportRepo = async (repoOrUrl: any) => {
     try {
+      setImportingRepo(true)
+      setModalError(null)
+      const url = typeof repoOrUrl === 'string'
+        ? (repoOrUrl.startsWith('http') ? repoOrUrl : `https://github.com/${repoOrUrl}`)
+        : (repoOrUrl.url || `https://github.com/${repoOrUrl.fullName}`)
+      const branch = typeof repoOrUrl === 'string' ? 'main' : (repoOrUrl.defaultBranch || 'main')
+      const fullName = typeof repoOrUrl === 'string'
+        ? repoOrUrl.replace(/https?:\/\/github\.com\//, '').replace(/\.git$/, '')
+        : (repoOrUrl.fullName || url.replace(/https?:\/\/github\.com\//, ''))
+
       const res = await fetch('/api/dashboard/integration', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           projectSlug,
-          repoUrl: repo.url,
-          defaultBranch: repo.defaultBranch || 'main',
-          repoFullName: repo.fullName,
+          repoUrl: url,
+          defaultBranch: branch,
+          repoFullName: fullName,
         }),
       })
+      const data = await res.json().catch(() => ({}))
       if (res.ok) {
-        setConnectedRepo(repo.fullName)
-        setConnectedBranch(repo.defaultBranch || 'main')
+        setConnectedRepo(data.fullName || fullName || url)
+        setConnectedBranch(branch)
         setLastSync('Never')
         setShowPickerModal(false)
-        setSyncMessage(`Repository switched to ${repo.fullName}`)
-        setTimeout(() => setSyncMessage(null), 3000)
+        setSyncMessage(`Repository connected: ${data.fullName || fullName}`)
+        setTimeout(() => setSyncMessage(null), 4000)
+      } else {
+        setModalError(data.error || 'Failed to connect repository. Please try again.')
       }
     } catch {
-      setSyncError('Failed to switch repository. Please try again.')
+      setModalError('Network error connecting repository. Please try again.')
+    } finally {
+      setImportingRepo(false)
     }
   }
 
@@ -209,7 +227,9 @@ export default function IntegrationsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
               <div className="p-3 rounded-lg bg-slate-950 border border-slate-800">
                 <p className="text-slate-500 text-[11px]">Repository</p>
-                <p className="text-white font-mono font-semibold mt-0.5">{connectedRepo}</p>
+                <p className="text-white font-mono font-semibold mt-0.5 truncate" title={connectedRepo}>
+                  {connectedRepo.replace(/https?:\/\/github\.com\//, '').replace(/\.git$/, '')}
+                </p>
               </div>
               <div className="p-3 rounded-lg bg-slate-950 border border-slate-800">
                 <p className="text-slate-500 text-[11px]">Watched Branch</p>
@@ -304,6 +324,37 @@ export default function IntegrationsPage() {
                     </div>
                   ))
                 )}
+              </div>
+
+              {modalError && (
+                <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>{modalError}</span>
+                </div>
+              )}
+
+              {/* Direct Repository URL Input */}
+              <div className="pt-3 border-t border-slate-800">
+                <p className="text-[11px] font-medium text-slate-400 mb-1.5">
+                  Or enter repository directly:
+                </p>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="e.g. owner/repo or https://github.com/owner/repo"
+                    value={manualRepoUrl}
+                    onChange={(e) => setManualRepoUrl(e.target.value)}
+                    className="bg-slate-950 border-slate-800 text-xs h-8"
+                  />
+                  <Button
+                    size="sm"
+                    variant="glow"
+                    disabled={!manualRepoUrl.trim() || importingRepo}
+                    onClick={() => handleImportRepo(manualRepoUrl.trim())}
+                    className="h-8 text-xs shrink-0"
+                  >
+                    {importingRepo ? 'Connecting...' : 'Connect'}
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
