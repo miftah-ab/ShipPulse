@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // ShipPulse  -  Entitlement System
 // Plan-based feature enforcement  -  always server-side.
 // Never trust client-side plan checks.
@@ -197,4 +197,153 @@ export function getPlanLimits(plan: Plan): PlanLimits {
   return PLAN_LIMITS[plan]
 }
 
+export interface LimitCheckResult {
+  allowed: boolean
+  currentUsage: number
+  limit: number
+  plan: Plan
+  upgradeRequired?: Plan
+  errorMessage?: string
+}
+
+/**
+ * Server-side asynchronous database query to enforce plan quotas.
+ */
+export async function checkWorkspaceLimit(
+  serviceDb: any,
+  workspaceId: string,
+  feature: keyof PlanLimits,
+  projectId?: string
+): Promise<LimitCheckResult> {
+  const { data: workspace } = await serviceDb
+    .from('shippulse_workspaces')
+    .select('plan')
+    .eq('id', workspaceId)
+    .single()
+
+  const plan: Plan = (workspace?.plan as Plan) ?? 'free'
+  const limits = PLAN_LIMITS[plan] ?? PLAN_LIMITS.free
+  const upgradeRequired: Plan = plan === 'free' ? 'pro' : 'team'
+
+  if (typeof limits[feature] === 'boolean') {
+    const allowed = !!limits[feature]
+    return {
+      allowed,
+      currentUsage: allowed ? 1 : 0,
+      limit: allowed ? 1 : 0,
+      plan,
+      upgradeRequired,
+      errorMessage: allowed
+        ? undefined
+        : `Feature "${feature}" requires an upgrade to ${upgradeRequired} (Current: ${plan}).`,
+    }
+  }
+
+  const limitNumber = limits[feature] as number
+  let currentUsage = 0
+
+  if (feature === 'maxProjects') {
+    const { count } = await serviceDb
+      .from('shippulse_projects')
+      .select('id', { count: 'exact', head: true })
+      .eq('workspace_id', workspaceId)
+      .is('deleted_at', null)
+    currentUsage = count || 0
+  } else if (feature === 'maxAIGenerationsPerMonth') {
+    const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
+    const { count } = await serviceDb
+      .from('shippulse_ai_usage')
+      .select('id', { count: 'exact', head: true })
+      .eq('workspace_id', workspaceId)
+      .gte('created_at', startOfMonth)
+    currentUsage = count || 0
+  } else if (feature === 'maxSubscribersPerProject' && projectId) {
+    const { count } = await serviceDb
+      .from('shippulse_subscribers')
+      .select('id', { count: 'exact', head: true })
+      .eq('project_id', projectId)
+    currentUsage = count || 0
+  } else if (feature === 'maxApiKeysPerWorkspace') {
+    const { count } = await serviceDb
+      .from('shippulse_api_keys')
+      .select('id', { count: 'exact', head: true })
+      .eq('workspace_id', workspaceId)
+    currentUsage = count || 0
+  }
+
+  const allowed = currentUsage < limitNumber
+
+  return {
+    allowed,
+    currentUsage,
+    limit: limitNumber,
+    plan,
+    upgradeRequired,
+    errorMessage: allowed
+      ? undefined
+      : `Plan limit reached: ${currentUsage}/${limitNumber} used on ${plan.toUpperCase()} plan. Upgrade to ${upgradeRequired.toUpperCase()} for expanded capacity.`,
+  }
+}
+
+/**
+ * Fetch comprehensive usage counters and current plan details for billing dashboard.
+ */
+export async function getWorkspaceUsageSummary(serviceDb: any, workspaceId: string) {
+  const { data: workspace } = await serviceDb
+    .from('shippulse_workspaces')
+    .select('id, name, slug, plan, billing_customer_id, billing_subscription_id')
+    .eq('id', workspaceId)
+    .single()
+
+  const plan: Plan = (workspace?.plan as Plan) ?? 'free'
+  const limits = PLAN_LIMITS[plan] ?? PLAN_LIMITS.free
+
+  const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
+
+  const [projectsRes, aiUsageRes, apiKeysRes] = await Promise.all([
+    serviceDb
+      .from('shippulse_projects')
+      .select('id', { count: 'exact', head: true })
+      .eq('workspace_id', workspaceId)
+      .is('deleted_at', null),
+    serviceDb
+      .from('shippulse_ai_usage')
+      .select('id', { count: 'exact', head: true })
+      .eq('workspace_id', workspaceId)
+      .gte('created_at', startOfMonth),
+    serviceDb
+      .from('shippulse_api_keys')
+      .select('id', { count: 'exact', head: true })
+      .eq('workspace_id', workspaceId),
+  ])
+
+  return {
+    workspace: {
+      id: workspaceId,
+      name: workspace?.name,
+      plan,
+      subscriptionId: workspace?.billing_subscription_id,
+    },
+    limits,
+    usage: {
+      projects: projectsRes.count || 0,
+      aiGenerationsThisMonth: aiUsageRes.count || 0,
+      apiKeys: apiKeysRes.count || 0,
+    },
+    pricing: {
+      chapa: {
+        currency: 'ETB',
+        proPrice: Number(process.env.CHAPA_PRO_PRICE_ETB || 2500),
+        teamPrice: Number(process.env.CHAPA_TEAM_PRICE_ETB || 6500),
+      },
+      polar: {
+        currency: 'USD',
+        proPrice: 19,
+        teamPrice: 49,
+      },
+    },
+  }
+}
+
 export { PLAN_LIMITS }
+

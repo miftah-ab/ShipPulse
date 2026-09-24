@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { generateUniqueSlug } from '@/lib/slugs'
+import { checkWorkspaceLimit } from '@/lib/billing/entitlements'
 
 export async function GET() {
   try {
@@ -93,6 +94,23 @@ export async function POST(request: NextRequest) {
 
     if (!membership) {
       return NextResponse.json({ error: 'Workspace not found or access denied' }, { status: 403 })
+    }
+
+    // Enforce Plan Limits
+    const limitCheck = await checkWorkspaceLimit(serviceDb, workspaceId, 'maxProjects')
+    if (!limitCheck.allowed) {
+      return NextResponse.json(
+        {
+          error: limitCheck.errorMessage || 'Workspace project limit reached.',
+          code: 'UPGRADE_REQUIRED',
+          feature: 'maxProjects',
+          currentUsage: limitCheck.currentUsage,
+          limit: limitCheck.limit,
+          plan: limitCheck.plan,
+          upgradeRequired: limitCheck.upgradeRequired,
+        },
+        { status: 403 }
+      )
     }
 
     // Get existing slugs

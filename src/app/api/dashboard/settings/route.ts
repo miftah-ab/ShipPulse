@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { checkWorkspaceLimit } from '@/lib/billing/entitlements'
 
 export async function PATCH(request: NextRequest) {
   try {
@@ -39,7 +40,26 @@ export async function PATCH(request: NextRequest) {
 
     const updates: any = { updated_at: new Date().toISOString() }
     if (name !== undefined) updates.name = name
-    if (customDomain !== undefined) updates.custom_domain = customDomain
+
+    if (customDomain !== undefined && customDomain.trim()) {
+      const limitCheck = await checkWorkspaceLimit(serviceDb, project.workspace_id, 'canUseCustomDomain')
+      if (!limitCheck.allowed) {
+        return NextResponse.json(
+          {
+            error: 'Custom domain mapping requires an upgrade to Pro or Team plan.',
+            code: 'UPGRADE_REQUIRED',
+            feature: 'canUseCustomDomain',
+            plan: limitCheck.plan,
+            upgradeRequired: 'pro',
+          },
+          { status: 403 }
+        )
+      }
+      updates.custom_domain = customDomain.trim()
+    } else if (customDomain === '') {
+      updates.custom_domain = null
+    }
+
     if (accentColor !== undefined) updates.accent_color = accentColor
 
     const { data: updated, error } = await serviceDb

@@ -29,36 +29,61 @@ export async function POST(request: NextRequest) {
 
     const serviceDb = createServiceClient()
 
-    // 1. Create or find workspace
-    const baseWSlug = workspaceSlug || workspaceName.toLowerCase().replace(/[^a-z0-9]+/g, '-')
-    const finalWSlug = `${baseWSlug}-${Date.now().toString(36)}`
+    // 1. Find existing workspace or create one if none exists
+    let workspace: any = null
+    const { data: existingMemberships } = await serviceDb
+      .from('shippulse_memberships')
+      .select('workspace_id')
+      .eq('user_id', user.id)
+      .limit(1)
 
-    const { data: workspace, error: wErr } = await serviceDb
-      .from('shippulse_workspaces')
-      .insert({
-        name: workspaceName,
-        slug: finalWSlug,
-        created_by: user.id,
-      })
-      .select()
-      .single()
+    if (existingMemberships && existingMemberships.length > 0) {
+      const { data: existingWorkspace } = await serviceDb
+        .from('shippulse_workspaces')
+        .select('*')
+        .eq('id', existingMemberships[0].workspace_id)
+        .is('deleted_at', null)
+        .maybeSingle()
 
-    if (wErr || !workspace) {
-      console.error('[Provision] Workspace error:', wErr?.message)
-      return NextResponse.json({ error: 'Failed to provision workspace' }, { status: 500 })
+      if (existingWorkspace) {
+        workspace = existingWorkspace
+        if (workspaceName && workspaceName !== 'My Workspace' && workspace.name !== workspaceName) {
+          await serviceDb
+            .from('shippulse_workspaces')
+            .update({ name: workspaceName })
+            .eq('id', workspace.id)
+        }
+      }
     }
 
-    // 2. Add owner membership
-    const { error: mErr } = await serviceDb
-      .from('shippulse_memberships')
-      .insert({
-        workspace_id: workspace.id,
-        user_id: user.id,
-        role: 'owner',
-      })
+    if (!workspace) {
+      const baseWSlug = workspaceSlug || workspaceName.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'workspace'
+      const finalWSlug = `${baseWSlug}-${Date.now().toString(36)}`
 
-    if (mErr) {
-      console.error('[Provision] Membership error:', mErr.message)
+      const { data: newW, error: wErr } = await serviceDb
+        .from('shippulse_workspaces')
+        .insert({
+          name: workspaceName,
+          slug: finalWSlug,
+          created_by: user.id,
+          plan: 'free',
+        })
+        .select()
+        .single()
+
+      if (wErr || !newW) {
+        console.error('[Provision] Workspace error:', wErr?.message)
+        return NextResponse.json({ error: 'Failed to provision workspace' }, { status: 500 })
+      }
+      workspace = newW
+
+      await serviceDb
+        .from('shippulse_memberships')
+        .insert({
+          workspace_id: workspace.id,
+          user_id: user.id,
+          role: 'owner',
+        })
     }
 
     // 3. Create Project

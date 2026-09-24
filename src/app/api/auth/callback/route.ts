@@ -35,59 +35,86 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  // ── Persist the GitHub provider_token ────────────────────────
-  // Supabase only exposes the provider_token immediately after exchange.
-  // We save it to the DB now so all subsequent API routes can use it.
+  // ── Persist user and GitHub details ────────────────────────
   const providerToken = sessionData?.session?.provider_token
-  const userId = sessionData?.user?.id
+  const user = sessionData?.user
+  const userId = user?.id
 
-  if (providerToken && userId) {
+  if (userId && user) {
     try {
       const serviceClient = createServiceClient()
 
-      // Upsert user row (created by Supabase trigger on first sign-in, but
-      // may not exist yet at this exact moment — be safe with upsert).
+      const githubLogin =
+        user.user_metadata?.user_name ??
+        user.user_metadata?.login ??
+        user.user_metadata?.preferred_username ??
+        null
+
+      const userRecord: any = {
+        id: userId,
+        email: user.email ?? '',
+        name: user.user_metadata?.full_name ?? user.user_metadata?.name ?? githubLogin ?? 'Developer',
+        avatar_url: user.user_metadata?.avatar_url ?? null,
+        github_login: githubLogin,
+        github_id: user.user_metadata?.provider_id ? Number(user.user_metadata.provider_id) : null,
+      }
+
+      if (providerToken) {
+        userRecord.github_access_token = providerToken
+        userRecord.github_token_updated = new Date().toISOString()
+      }
+
       await serviceClient
         .from('shippulse_users')
-        .upsert(
-          {
-            id: userId,
-            email: sessionData.user?.email ?? '',
-            name: sessionData.user?.user_metadata?.full_name ?? sessionData.user?.user_metadata?.name ?? null,
-            avatar_url: sessionData.user?.user_metadata?.avatar_url ?? null,
-            github_login: sessionData.user?.user_metadata?.user_name ?? sessionData.user?.user_metadata?.login ?? null,
-            github_id: sessionData.user?.user_metadata?.provider_id
-              ? Number(sessionData.user.user_metadata.provider_id)
-              : null,
-            github_access_token: providerToken,
-            github_token_updated: new Date().toISOString(),
-          },
-          { onConflict: 'id' }
-        )
+        .upsert(userRecord, { onConflict: 'id' })
 
-      console.log(`[Auth] GitHub token persisted for user ${userId}`)
-    } catch (err: any) {
-      // Non-fatal: user can still proceed; repos page will show connect prompt
-      console.error('[Auth] Failed to persist GitHub token:', err.message)
-    }
-  }
+      console.log(`[Auth] User profile and token updated for user ${userId}`)
 
-  // ── Redirect user ──────────────────────────────────────────
-  // If user already has an active workspace/project, redirect directly to dashboard releases
-  if (userId) {
-    try {
-      const serviceClient = createServiceClient()
+      // ── Ensure user has a workspace ────────────────────────────
       const { data: memberships } = await serviceClient
         .from('shippulse_memberships')
         .select('workspace_id')
         .eq('user_id', userId)
         .limit(1)
 
-      if (memberships && memberships.length > 0) {
+      let workspaceId = memberships?.[0]?.workspace_id
+
+      if (!workspaceId) {
+        // Auto-provision primary workspace for the new user
+        const baseName = githubLogin ? `${githubLogin}'s Workspace` : 'My Workspace'
+        const baseSlug = (githubLogin || 'workspace').toLowerCase().replace(/[^a-z0-9]+/g, '-')
+        const workspaceSlug = `${baseSlug}-${Date.now().toString(36).slice(-4)}`
+
+        const { data: newWorkspace, error: wErr } = await serviceClient
+          .from('shippulse_workspaces')
+          .insert({
+            name: baseName,
+            slug: workspaceSlug,
+            created_by: userId,
+            plan: 'free',
+          })
+          .select('id')
+          .single()
+
+        if (newWorkspace?.id) {
+          workspaceId = newWorkspace.id
+          await serviceClient.from('shippulse_memberships').insert({
+            workspace_id: newWorkspace.id,
+            user_id: userId,
+            role: 'owner',
+          })
+          console.log(`[Auth] Auto-provisioned workspace ${workspaceId} for user ${userId}`)
+        } else if (wErr) {
+          console.error('[Auth] Failed to auto-provision workspace:', wErr.message)
+        }
+      }
+
+      // ── Check if user has an existing project ──────────────────
+      if (workspaceId) {
         const { data: project } = await serviceClient
           .from('shippulse_projects')
           .select('slug')
-          .eq('workspace_id', memberships[0].workspace_id)
+          .eq('workspace_id', workspaceId)
           .is('deleted_at', null)
           .order('created_at', { ascending: true })
           .limit(1)
@@ -96,14 +123,13 @@ export async function GET(request: NextRequest) {
         if (project?.slug) {
           return NextResponse.redirect(`${origin}/${project.slug}/releases`)
         }
-        return NextResponse.redirect(`${origin}/dashboard`)
       }
-    } catch (checkErr: any) {
-      console.warn('[Auth] Error checking existing projects:', checkErr.message)
+    } catch (err: any) {
+      console.error('[Auth] Error in callback provisioning:', err.message)
     }
   }
 
-  // First time user with no workspace yet: send to onboarding
+  // If user has no project yet: guide seamlessly to onboarding
   const redirectTo = next && next !== '/dashboard' ? next : '/onboarding'
   return NextResponse.redirect(`${origin}${redirectTo}`)
 }

@@ -1,23 +1,20 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import {
   Sparkles,
-  Building2,
   FolderGit2,
   GitBranch,
   RefreshCw,
-  Eye,
-  Radio,
   CheckCircle2,
   ArrowRight,
-  ArrowLeft,
-  Copy,
-  Check,
   Code,
-  Search
+  Search,
+  Plus,
+  ExternalLink,
+  ShieldCheck,
+  Zap,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -25,47 +22,27 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 
 export default function OnboardingPage() {
-  const router = useRouter()
-  const [currentStep, setCurrentStep] = useState(1)
   const [loading, setLoading] = useState(false)
-  const [copiedCode, setCopiedCode] = useState(false)
+  const [checkingExisting, setCheckingExisting] = useState(true)
+  const [activeMode, setActiveMode] = useState<'import' | 'manual'>('import')
 
-  // Form state across 6 steps
-  const [formData, setFormData] = useState({
-    workspaceName: '',
-    workspaceSlug: '',
-    projectName: '',
-    projectSlug: '',
-    repoUrl: '',
-    repoBranch: 'main',
-    syncStatus: 'idle', // 'idle' | 'syncing' | 'completed'
-  })
-
-  // Real AI sync results & status
-  const [syncPhase, setSyncPhase] = useState('Connecting to GitHub…')
-  const [syncError, setSyncError] = useState<string | null>(null)
-  const [realCommits, setRealCommits] = useState<any[]>([])
-  const [commitsAnalyzedCount, setCommitsAnalyzedCount] = useState<number>(0)
-  const [generatedRelease, setGeneratedRelease] = useState<{
-    version: string
-    title: string
-    summary: string
-    content?: string
-    entries: Array<{
-      title: string
-      description: string
-      category: 'New' | 'Improved' | 'Fixed' | 'Security' | 'Performance' | 'Breaking' | 'Removed' | 'Other'
-    }>
-  } | null>(null)
-
-  // GitHub Repositories for Step 3 Import Picker
+  // Repositories state
   const [repos, setRepos] = useState<any[]>([])
   const [repoSearch, setRepoSearch] = useState('')
   const [loadingRepos, setLoadingRepos] = useState(false)
   const [needsGitHubConnect, setNeedsGitHubConnect] = useState(false)
   const [repoMessage, setRepoMessage] = useState('')
 
-  const fetchRepos = React.useCallback(async (query?: string) => {
+  // Selected or manual project state
+  const [projectName, setProjectName] = useState('')
+  const [projectSlug, setProjectSlug] = useState('')
+  const [selectedRepo, setSelectedRepo] = useState<any | null>(null)
+
+  // Status & Progress
+  const [provisionPhase, setProvisionPhase] = useState<string | null>(null)
+  const [provisionError, setProvisionError] = useState<string | null>(null)
+
+  const fetchRepos = useCallback(async (query?: string) => {
     try {
       setLoadingRepos(true)
       setNeedsGitHubConnect(false)
@@ -89,9 +66,7 @@ export default function OnboardingPage() {
     }
   }, [])
 
-  React.useEffect(() => {
-    // If the user is already registered and has projects, send them straight to their dashboard.
-    // Check both: projects via membership AND projects created directly by the user.
+  useEffect(() => {
     const checkExistingUser = async () => {
       try {
         const res = await fetch('/api/projects')
@@ -103,316 +78,194 @@ export default function OnboardingPage() {
           }
         }
       } catch {
-        // continue to onboarding
+        // continue
+      } finally {
+        setCheckingExisting(false)
       }
     }
     checkExistingUser()
     fetchRepos()
   }, [fetchRepos])
 
-
-  // Step 1: Workspace setup
-  const handleWorkspaceSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!formData.workspaceName) return
-    const slug = formData.workspaceSlug || formData.workspaceName.toLowerCase().replace(/[^a-z0-9]/g, '-')
-    setFormData((prev) => ({ ...prev, workspaceSlug: slug }))
-    setCurrentStep(2)
-  }
-
-  // Step 2: Project setup
-  const handleProjectSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!formData.projectName) return
-    const slug = formData.projectSlug || formData.projectName.toLowerCase().replace(/[^a-z0-9]/g, '-')
-    setFormData((prev) => ({ ...prev, projectSlug: slug }))
-    setCurrentStep(3)
-  }
-
-  // Step 4: Real Git sync & AI generation
-  const triggerRealAiSync = async (targetRepoUrl?: string, targetBranch?: string) => {
-    const urlToUse = targetRepoUrl || formData.repoUrl
-    const branchToUse = targetBranch || formData.repoBranch || 'main'
-    if (!urlToUse) return
-
-    setLoading(true)
-    setSyncError(null)
-    setFormData((prev) => ({ ...prev, syncStatus: 'syncing' }))
-    setSyncPhase('Connecting to GitHub & fetching repository commits…')
-
+  // Execute fast, reliable 1-click provision
+  const handleImportRepo = async (repo: any) => {
     try {
-      const res = await fetch('/api/onboarding/ai-sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          repoUrl: urlToUse,
-          repoBranch: branchToUse,
-          projectName: formData.projectName,
-          workspaceName: formData.workspaceName,
-        }),
-      })
+      setLoading(true)
+      setSelectedRepo(repo)
+      setProvisionError(null)
+      setProvisionPhase(`Connecting ${repo.fullName} and setting up project…`)
 
-      const data = await res.json()
+      const pName = repo.name || repo.fullName.split('/')[1] || 'Product'
+      const pSlug = pName.toLowerCase().replace(/[^a-z0-9]+/g, '-')
 
-      if (!res.ok) {
-        if (data.needsConnect) {
-          window.location.href = '/api/github/connect'
-          return
-        }
-        throw new Error(data.error || 'Failed to sync with repository')
-      }
-
-      setRealCommits(data.recentCommits || [])
-      setCommitsAnalyzedCount(data.commitCount || 0)
-      setGeneratedRelease(data.release)
-      setFormData((prev) => ({ ...prev, syncStatus: 'completed' }))
-    } catch (err: any) {
-      console.error('Real sync error:', err)
-      setSyncError(err.message || 'Failed to sync repository.')
-      setFormData((prev) => ({ ...prev, syncStatus: 'idle' }))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // Step 3: Connect repository
-  const handleRepoSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!formData.repoUrl) return
-    setCurrentStep(4)
-    triggerRealAiSync(formData.repoUrl, formData.repoBranch || 'main')
-  }
-
-  // Copy widget embed snippet
-  const widgetSnippet = `<script
-  src="${typeof window !== 'undefined' ? window.location.origin : 'https://shippulse.app'}/widget.js"
-  data-project="${formData.projectSlug || 'my-project'}"
-  defer
-></script>`
-
-  const copyWidgetCode = () => {
-    navigator.clipboard.writeText(widgetSnippet)
-    setCopiedCode(true)
-    setTimeout(() => setCopiedCode(false), 2000)
-  }
-
-  const [isProvisioning, setIsProvisioning] = useState(false)
-
-  const completeOnboarding = async () => {
-    try {
-      setIsProvisioning(true)
+      // 1. Provision Workspace & Project immediately
       const res = await fetch('/api/onboarding/provision', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          workspaceName: formData.workspaceName || 'My Workspace',
-          workspaceSlug: formData.workspaceSlug,
-          projectName: formData.projectName || 'My Project',
-          projectSlug: formData.projectSlug,
-          repoUrl: formData.repoUrl,
-          repoBranch: formData.repoBranch,
-          initialRelease: generatedRelease,
+          workspaceName: `${repo.owner || 'My'} Workspace`,
+          projectName: pName,
+          projectSlug: pSlug,
+          repoUrl: repo.url,
+          repoBranch: repo.defaultBranch || 'main',
         }),
       })
 
-      if (res.ok) {
-        const data = await res.json()
-        if (data.project?.slug) {
-          window.location.href = `/${data.project.slug}/releases`
-          return
-        }
+      const data = await res.json()
+      if (!res.ok || !data.project?.slug) {
+        throw new Error(data.error || 'Failed to create project')
       }
-    } catch (e) {
-      console.error('Provisioning error:', e)
-    } finally {
-      setIsProvisioning(false)
-    }
 
-    if (formData.projectSlug) {
-      window.location.href = `/${formData.projectSlug}/releases`
-    } else {
-      window.location.href = '/dashboard'
+      setProvisionPhase('Import complete! Redirecting to your dashboard…')
+      setTimeout(() => {
+        window.location.href = `/${data.project.slug}/releases`
+      }, 600)
+    } catch (err: any) {
+      console.error('[Onboarding] Import failed:', err)
+      setProvisionError(err.message || 'Failed to import repository. Please try again.')
+      setLoading(false)
+      setProvisionPhase(null)
     }
   }
 
-  const steps = [
-    { num: 1, title: 'Workspace', icon: Building2 },
-    { num: 2, title: 'Project', icon: FolderGit2 },
-    { num: 3, title: 'Repository', icon: GitBranch },
-    { num: 4, title: 'AI Sync', icon: RefreshCw },
-    { num: 5, title: 'Preview', icon: Eye },
-    { num: 6, title: 'Widget', icon: Radio },
-  ]
+  const handleManualCreate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!projectName.trim()) return
+
+    try {
+      setLoading(true)
+      setProvisionError(null)
+      setProvisionPhase('Creating your project…')
+
+      const slug = projectSlug.trim() || projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+
+      const res = await fetch('/api/onboarding/provision', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectName: projectName.trim(),
+          projectSlug: slug,
+        }),
+      })
+
+      const data = await res.json()
+      if (!res.ok || !data.project?.slug) {
+        throw new Error(data.error || 'Failed to create project')
+      }
+
+      setProvisionPhase('Ready! Launching dashboard…')
+      setTimeout(() => {
+        window.location.href = `/${data.project.slug}/releases`
+      }, 500)
+    } catch (err: any) {
+      console.error('[Onboarding] Manual creation failed:', err)
+      setProvisionError(err.message || 'Failed to create project.')
+      setLoading(false)
+      setProvisionPhase(null)
+    }
+  }
+
+  if (checkingExisting) {
+    return (
+      <div className="min-h-screen bg-[#0A0D14] flex flex-col items-center justify-center p-6 text-slate-400">
+        <RefreshCw className="h-8 w-8 text-indigo-400 animate-spin mb-4" />
+        <p className="text-sm font-medium">Checking workspace status…</p>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-[#0A0D14] text-slate-100 flex flex-col items-center justify-between p-4 sm:p-8 relative">
-      {/* Header */}
+      {/* Top Header */}
       <header className="w-full max-w-4xl flex items-center justify-between py-4">
-        <Link href="/dashboard" className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center">
+        <Link href="/" className="flex items-center gap-2">
+          <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
             <Sparkles className="h-4 w-4 text-white" />
           </div>
           <span className="font-bold text-lg text-white">ShipPulse</span>
         </Link>
-        <span className="text-xs text-slate-400">Step {currentStep} of 6</span>
+        <div className="flex items-center gap-2 text-xs text-slate-400">
+          <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
+          <span>Production Ready SaaS</span>
+        </div>
       </header>
 
-      {/* Progress Bar / Stepper */}
-      <div className="w-full max-w-4xl my-6">
-        <div className="grid grid-cols-6 gap-2">
-          {steps.map((s) => {
-            const Icon = s.icon
-            const isDone = currentStep > s.num
-            const isCurrent = currentStep === s.num
-            return (
-              <div key={s.num} className="flex flex-col items-center gap-1.5">
-                <div
-                  className={`h-9 w-9 rounded-full flex items-center justify-center text-xs font-semibold transition-all ${
-                    isDone
-                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-                      : isCurrent
-                      ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30 ring-2 ring-indigo-400/40'
-                      : 'bg-slate-900 border border-slate-800 text-slate-500'
-                  }`}
-                >
-                  {isDone ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
-                </div>
-                <span className={`text-[11px] font-medium hidden sm:inline ${isCurrent ? 'text-indigo-400' : 'text-slate-500'}`}>
-                  {s.title}
-                </span>
-              </div>
-            )
-          })}
+      {/* Main Container */}
+      <main className="w-full max-w-2xl my-auto py-6">
+        <div className="text-center mb-8 space-y-2">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-semibold mb-1">
+            <Zap className="h-3.5 w-3.5" />
+            <span>Instant Project Setup</span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+            Connect your code. Ship updates that users understand.
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-400 max-w-lg mx-auto">
+            Select a GitHub repository to automatically monitor commits and draft customer releases, or create a project from scratch.
+          </p>
         </div>
-      </div>
 
-      {/* Step Container */}
-      <main className="w-full max-w-xl my-auto">
-        {/* STEP 1: CREATE WORKSPACE */}
-        {currentStep === 1 && (
-          <Card className="border-slate-800 bg-slate-900/80 backdrop-blur-xl">
-            <CardHeader>
-              <CardTitle className="text-xl">Create your Workspace</CardTitle>
-              <CardDescription className="text-xs text-slate-400">
-                A workspace groups your team, billing plan, and product repositories together.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleWorkspaceSubmit} className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-slate-300">Workspace Name</label>
-                  <Input
-                    placeholder="e.g. My Company"
-                    value={formData.workspaceName}
-                    onChange={(e) =>
-                      setFormData((p) => ({
-                        ...p,
-                        workspaceName: e.target.value,
-                        workspaceSlug: e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '-'),
-                      }))
-                    }
-                    required
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-slate-300">Workspace URL Slug</label>
-                  <div className="flex items-center">
-                    <span className="text-xs bg-slate-800 px-3 py-2 rounded-l-lg border border-r-0 border-slate-750 text-slate-400">
-                      shippulse.app/
-                    </span>
-                    <Input
-                      className="rounded-l-none"
-                      value={formData.workspaceSlug}
-                      onChange={(e) => setFormData((p) => ({ ...p, workspaceSlug: e.target.value }))}
-                      placeholder="my-company"
-                      required
-                    />
-                  </div>
-                </div>
-                <Button type="submit" variant="glow" className="w-full mt-2 flex items-center justify-center gap-2">
-                  <span>Continue</span>
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
+        {/* Tab Selector */}
+        <div className="flex items-center justify-center gap-2 mb-6">
+          <button
+            onClick={() => setActiveMode('import')}
+            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all ${
+              activeMode === 'import'
+                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30'
+                : 'bg-slate-900/80 text-slate-400 hover:text-white border border-slate-800'
+            }`}
+          >
+            <GitBranch className="h-3.5 w-3.5" />
+            <span>Import GitHub Repository</span>
+          </button>
+          <button
+            onClick={() => setActiveMode('manual')}
+            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all ${
+              activeMode === 'manual'
+                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30'
+                : 'bg-slate-900/80 text-slate-400 hover:text-white border border-slate-800'
+            }`}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span>Create Custom Project</span>
+          </button>
+        </div>
+
+        {/* Active Progress or Error Banner */}
+        {provisionPhase && (
+          <div className="mb-6 p-4 rounded-xl bg-indigo-950/40 border border-indigo-500/40 flex items-center gap-3 text-indigo-200 text-xs">
+            <RefreshCw className="h-4 w-4 animate-spin text-indigo-400 shrink-0" />
+            <span>{provisionPhase}</span>
+          </div>
+        )}
+        {provisionError && (
+          <div className="mb-6 p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center justify-between">
+            <span>{provisionError}</span>
+            <button onClick={() => setProvisionError(null)} className="underline hover:text-rose-300 ml-3">
+              Dismiss
+            </button>
+          </div>
         )}
 
-        {/* STEP 2: CREATE PROJECT */}
-        {currentStep === 2 && (
-          <Card className="border-slate-800 bg-slate-900/80 backdrop-blur-xl">
-            <CardHeader>
-              <CardTitle className="text-xl">Setup your First Product Project</CardTitle>
-              <CardDescription className="text-xs text-slate-400">
-                Each project powers an independent public changelog and in-app widget.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleProjectSubmit} className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-slate-300">Product / Project Name</label>
-                  <Input
-                    placeholder="e.g. Main Dashboard"
-                    value={formData.projectName}
-                    onChange={(e) =>
-                      setFormData((p) => ({
-                        ...p,
-                        projectName: e.target.value,
-                        projectSlug: e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '-'),
-                      }))
-                    }
-                    required
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-slate-300">Public Changelog URL</label>
-                  <div className="flex items-center">
-                    <span className="text-xs bg-slate-800 px-3 py-2 rounded-l-lg border border-r-0 border-slate-750 text-slate-400">
-                      shippulse.app/
-                    </span>
-                    <Input
-                      className="rounded-l-none"
-                      value={formData.projectSlug}
-                      onChange={(e) => setFormData((p) => ({ ...p, projectSlug: e.target.value }))}
-                      placeholder="main-dashboard"
-                      required
-                    />
-                  </div>
-                </div>
-                <div className="flex items-center justify-between gap-3 mt-4">
-                  <Button type="button" variant="outline" onClick={() => setCurrentStep(1)}>
-                    <ArrowLeft className="h-4 w-4 mr-1" />
-                    Back
-                  </Button>
-                  <Button type="submit" variant="glow" className="flex items-center gap-2">
-                    <span>Continue to Repo</span>
-                    <ArrowRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* STEP 3: CONNECT GITHUB REPOSITORY (Vercel-style import picker) */}
-        {currentStep === 3 && (
+        {/* MODE 1: GITHUB IMPORT */}
+        {activeMode === 'import' && (
           <Card className="border-slate-800 bg-slate-900/80 backdrop-blur-xl">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="text-xl">Import Git Repository</CardTitle>
-                  <CardDescription className="text-xs text-slate-400 mt-1">
-                    Select a repository to watch for commits, pull requests, and releases.
+                  <CardTitle className="text-lg">Your GitHub Repositories</CardTitle>
+                  <CardDescription className="text-xs text-slate-400">
+                    Click &quot;Import&quot; to link your repository and launch your changelog.
                   </CardDescription>
                 </div>
-                <Badge variant="outline" className="text-[11px] font-mono border-slate-750 flex items-center gap-1">
+                <Badge variant="outline" className="border-slate-750 text-[11px] font-mono flex items-center gap-1">
                   <GitBranch className="h-3 w-3 text-indigo-400" />
-                  <span>GitHub</span>
+                  <span>GitHub Connected</span>
                 </Badge>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Search & Account Bar */}
+              {/* Search bar */}
               <div className="flex items-center gap-2">
                 <div className="relative flex-1">
                   <Search className="h-3.5 w-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -420,7 +273,7 @@ export default function OnboardingPage() {
                     type="text"
                     value={repoSearch}
                     onChange={(e) => setRepoSearch(e.target.value)}
-                    placeholder="Search repositories..."
+                    placeholder="Search your repositories..."
                     className="h-9 w-full rounded-lg border border-slate-750 bg-slate-950 pl-8 pr-3 text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
                   />
                 </div>
@@ -435,8 +288,7 @@ export default function OnboardingPage() {
               </div>
 
               {/* Repositories List */}
-              <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
-                {/* Connect GitHub CTA */}
+              <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
                 {needsGitHubConnect && !loadingRepos && (
                   <div className="p-6 text-center border border-dashed border-indigo-800/60 rounded-xl space-y-3 bg-indigo-950/20">
                     <GitBranch className="h-8 w-8 text-indigo-400 mx-auto" />
@@ -451,306 +303,138 @@ export default function OnboardingPage() {
                   </div>
                 )}
 
-                {repos
-                  .map((repo) => {
-                    const isSelected = formData.repoUrl === repo.url
-                    return (
-                      <div
-                        key={repo.id}
-                        className={`p-3 rounded-xl border transition-all flex items-center justify-between gap-3 ${
-                          isSelected
-                            ? 'border-indigo-500/60 bg-indigo-950/20'
-                            : 'border-slate-800 bg-slate-950/60 hover:border-slate-750 hover:bg-slate-950'
-                        }`}
-                      >
-                        <div className="space-y-1 min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-xs text-white truncate">{repo.fullName}</span>
-                            <span
-                              className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${
-                                repo.isPrivate
-                                  ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                                  : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                              }`}
-                            >
-                              {repo.isPrivate ? 'Private' : 'Public'}
-                            </span>
-                            <span className="text-[10px] text-slate-500 font-mono">
-                              {repo.defaultBranch}
-                            </span>
-                          </div>
-                          {repo.description && (
-                            <p className="text-[11px] text-slate-400 truncate">{repo.description}</p>
-                          )}
+                {repos.map((repo) => {
+                  const isImportingThis = loading && selectedRepo?.id === repo.id
+                  return (
+                    <div
+                      key={repo.id}
+                      className="p-3.5 rounded-xl border border-slate-800 bg-slate-950/60 hover:border-slate-700 hover:bg-slate-950 flex items-center justify-between gap-3 transition-all"
+                    >
+                      <div className="space-y-1 min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-xs text-white truncate">{repo.fullName}</span>
+                          <span
+                            className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${
+                              repo.isPrivate
+                                ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                            }`}
+                          >
+                            {repo.isPrivate ? 'Private' : 'Public'}
+                          </span>
+                          <span className="text-[10px] text-slate-500 font-mono">{repo.defaultBranch}</span>
                         </div>
-
-                        <Button
-                          size="sm"
-                          variant={isSelected ? 'secondary' : 'glow'}
-                          onClick={() => {
-                            const url = repo.url
-                            const branch = repo.defaultBranch || 'main'
-                            setFormData((prev) => ({
-                              ...prev,
-                              repoUrl: url,
-                              repoBranch: branch,
-                            }))
-                            setCurrentStep(4)
-                            triggerRealAiSync(url, branch)
-                          }}
-                          className="h-7 text-xs shrink-0 px-3 font-semibold"
-                        >
-                          {isSelected ? 'Selected' : 'Import'}
-                        </Button>
+                        {repo.description && (
+                          <p className="text-[11px] text-slate-400 truncate">{repo.description}</p>
+                        )}
                       </div>
-                    )
-                  })}
+
+                      <Button
+                        size="sm"
+                        variant="glow"
+                        disabled={loading}
+                        onClick={() => handleImportRepo(repo)}
+                        className="h-8 text-xs shrink-0 px-3.5 font-semibold flex items-center gap-1.5"
+                      >
+                        {isImportingThis ? (
+                          <>
+                            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                            <span>Importing…</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>Import</span>
+                            <ArrowRight className="h-3 w-3" />
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  )
+                })}
 
                 {repos.length === 0 && !loadingRepos && !needsGitHubConnect && (
-                  <div className="p-8 text-center border border-dashed border-slate-800 rounded-xl text-xs text-slate-500">
-                    {repoSearch ? `No repositories matching "${repoSearch}".` : 'No repositories found.'}
+                  <div className="p-8 text-center border border-dashed border-slate-800 rounded-xl text-xs text-slate-500 space-y-2">
+                    <p>{repoSearch ? `No repositories matching "${repoSearch}".` : 'No repositories found on this GitHub account.'}</p>
+                    <button
+                      onClick={() => setActiveMode('manual')}
+                      className="text-indigo-400 hover:underline inline-block mt-1 font-semibold"
+                    >
+                      Or create a project without GitHub &rarr;
+                    </button>
                   </div>
                 )}
               </div>
-
-              {/* Navigation Back */}
-              <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-xs">
-                <Button type="button" variant="outline" size="sm" onClick={() => setCurrentStep(2)}>
-                  <ArrowLeft className="h-4 w-4 mr-1" />
-                  Back
-                </Button>
-
-                <span className="text-[11px] text-slate-500">
-                  🔒 Granular access: We only inspect commits & tags.
-                </span>
-              </div>
             </CardContent>
           </Card>
         )}
 
-        {/* STEP 4: REAL AI SYNC */}
-        {currentStep === 4 && (
-          <Card className="border-slate-800 bg-slate-900/80 backdrop-blur-xl text-center">
-            <CardHeader>
-              <CardTitle className="text-xl">Running Real AI Sync</CardTitle>
-              <CardDescription className="text-xs text-slate-400">
-                Clustering commits, filtering internal chores, and drafting your inaugural release.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {formData.syncStatus === 'syncing' ? (
-                <div className="py-8 flex flex-col items-center gap-3">
-                  <RefreshCw className="h-8 w-8 text-indigo-400 animate-spin" />
-                  <p className="text-sm font-medium text-slate-200">
-                    {syncPhase}
-                  </p>
-                  <p className="text-xs text-slate-500 font-mono">
-                    {formData.repoUrl} ({formData.repoBranch})
-                  </p>
-                </div>
-              ) : syncError ? (
-                <div className="py-6 flex flex-col items-center gap-3">
-                  <div className="p-3 text-xs rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 max-w-md text-left">
-                    {syncError}
-                  </div>
-                  <div className="flex gap-3 mt-2">
-                    <Button variant="outline" size="sm" onClick={() => setCurrentStep(3)}>
-                      Choose Another Repo
-                    </Button>
-                    <Button variant="glow" size="sm" onClick={() => triggerRealAiSync()}>
-                      Retry Sync
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="py-6 flex flex-col items-center gap-4">
-                  <CheckCircle2 className="h-10 w-10 text-emerald-400" />
-                  <div>
-                    <h4 className="text-base font-semibold text-white">First Release Draft Ready!</h4>
-                    <p className="text-xs text-slate-300 mt-1">
-                      Synthesized <strong className="text-indigo-400">{commitsAnalyzedCount} commits</strong> into{' '}
-                      <strong className="text-emerald-400">{generatedRelease?.entries?.length || 0} customer-facing product enhancements</strong>.
-                    </p>
-                  </div>
-
-                  {realCommits.length > 0 && (
-                    <div className="w-full text-left bg-slate-950/70 border border-slate-800/80 rounded-xl p-3.5 space-y-2">
-                      <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                        Recent Commits Ingested from GitHub:
-                      </p>
-                      <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
-                        {realCommits.map((c, i) => (
-                          <div key={i} className="flex items-center gap-2 text-xs font-mono text-slate-300">
-                            <span className="text-indigo-400 bg-indigo-950/50 px-1.5 py-0.5 rounded text-[10px] border border-indigo-500/20 shrink-0">
-                              {c.sha}
-                            </span>
-                            <span className="truncate text-slate-300 font-sans text-xs">{c.message}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <Button variant="glow" onClick={() => setCurrentStep(5)} className="mt-2 flex items-center gap-2">
-                    <span>Preview Release</span>
-                    <ArrowRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* STEP 5: PREVIEW REAL INITIAL RELEASE */}
-        {currentStep === 5 && (
+        {/* MODE 2: CUSTOM PROJECT */}
+        {activeMode === 'manual' && (
           <Card className="border-slate-800 bg-slate-900/80 backdrop-blur-xl">
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-xl">Initial Release Preview</CardTitle>
-                  <CardDescription className="text-xs text-slate-400">
-                    This is how your updates will appear to your end users.
-                  </CardDescription>
-                </div>
-                <Badge variant="feature">AI Generated</Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
-                <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
-                  <h4 className="text-sm font-bold text-white">
-                    {generatedRelease?.title || `v1.0.0 - Launch of ${formData.projectName || 'New Service'}`}
-                  </h4>
-                  <span className="text-xs font-mono text-indigo-400 bg-indigo-950/60 px-2 py-0.5 rounded border border-indigo-500/30 shrink-0">
-                    {generatedRelease?.version || 'v1.0.0'}
-                  </span>
-                </div>
-
-                <p className="text-xs text-slate-300 leading-relaxed">
-                  {generatedRelease?.summary ||
-                    'We are excited to unveil our core platform features, enhanced performance optimizations, and full API integration.'}
-                </p>
-
-                {generatedRelease?.entries && generatedRelease.entries.length > 0 ? (
-                  <div className="space-y-2.5 pt-2 border-t border-slate-800/80">
-                    {generatedRelease.entries.map((entry, idx) => (
-                      <div key={idx} className="flex items-start gap-2.5">
-                        <Badge
-                          variant={
-                            entry.category === 'New'
-                              ? 'feature'
-                              : entry.category === 'Fixed'
-                              ? 'fix'
-                              : entry.category === 'Performance'
-                              ? 'perf'
-                              : entry.category === 'Security'
-                              ? 'security'
-                              : entry.category === 'Breaking'
-                              ? 'breaking'
-                              : 'secondary'
-                          }
-                          className="text-[10px] shrink-0 mt-0.5"
-                        >
-                          {entry.category}
-                        </Badge>
-                        <div className="space-y-0.5">
-                          <p className="text-xs font-semibold text-white">{entry.title}</p>
-                          {entry.description && (
-                            <p className="text-[11px] text-slate-400 leading-normal">{entry.description}</p>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="space-y-2 pt-2 border-t border-slate-800/80">
-                    <div className="flex items-start gap-2">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 mt-0.5 shrink-0" />
-                      <p className="text-xs text-slate-300">
-                        <strong>Core Engine:</strong> High throughput processing pipeline with sub-second response times.
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex items-center justify-between gap-3 mt-4">
-                <Button type="button" variant="outline" onClick={() => setCurrentStep(4)}>
-                  <ArrowLeft className="h-4 w-4 mr-1" />
-                  Back
-                </Button>
-                <Button variant="glow" onClick={() => setCurrentStep(6)} className="flex items-center gap-2">
-                  <span>Next: In-App Widget</span>
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* STEP 6: IN-APP WIDGET SETUP */}
-        {currentStep === 6 && (
-          <Card className="border-slate-800 bg-slate-900/80 backdrop-blur-xl">
-            <CardHeader>
-              <CardTitle className="text-xl">Embed In-App Widget</CardTitle>
+              <CardTitle className="text-lg">Create Custom Product Project</CardTitle>
               <CardDescription className="text-xs text-slate-400">
-                Copy and paste this snippet right before the closing &lt;/body&gt; tag of your website.
+                You can link a GitHub repository or custom webhook anytime later from Project Settings.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="relative">
-                <pre className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs font-mono text-indigo-300 overflow-x-auto">
-                  {widgetSnippet}
-                </pre>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={copyWidgetCode}
-                  className="absolute top-3 right-3 h-7 px-2.5 text-xs bg-slate-850 hover:bg-slate-800 text-slate-200"
-                >
-                  {copiedCode ? (
-                    <span className="flex items-center gap-1 text-emerald-400">
-                      <Check className="h-3 w-3" /> Copied
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-1">
-                      <Copy className="h-3 w-3" /> Copy
-                    </span>
-                  )}
-                </Button>
-              </div>
+            <CardContent>
+              <form onSubmit={handleManualCreate} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-slate-300">Project / Product Name</label>
+                  <Input
+                    placeholder="e.g. Acme Web App"
+                    value={projectName}
+                    onChange={(e) => {
+                      setProjectName(e.target.value)
+                      setProjectSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-'))
+                    }}
+                    required
+                  />
+                </div>
 
-              <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800 text-xs text-slate-400 space-y-1">
-                <p className="font-semibold text-slate-300">Widget Features Included:</p>
-                <ul className="list-disc pl-4 space-y-0.5">
-                  <li>Automatic unread badge count tracking</li>
-                  <li>Shadow DOM isolation (never clashes with your CSS)</li>
-                  <li>No external framework dependencies (~12KB gzipped)</li>
-                </ul>
-              </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-slate-300">Public Changelog URL Slug</label>
+                  <div className="flex items-center">
+                    <span className="text-xs bg-slate-800 px-3 py-2 rounded-l-lg border border-r-0 border-slate-750 text-slate-400">
+                      shippulse.app/
+                    </span>
+                    <Input
+                      className="rounded-l-none"
+                      value={projectSlug}
+                      onChange={(e) => setProjectSlug(e.target.value)}
+                      placeholder="acme-web-app"
+                      required
+                    />
+                  </div>
+                </div>
 
-              <div className="pt-2">
                 <Button
-                  onClick={completeOnboarding}
+                  type="submit"
                   variant="glow"
-                  className="w-full flex items-center justify-center gap-2 h-11 text-base font-semibold"
+                  disabled={loading || !projectName.trim()}
+                  className="w-full h-10 mt-3 flex items-center justify-center gap-2 font-semibold text-xs"
                 >
-                  <span>Go to Dashboard</span>
-                  <ArrowRight className="h-5 w-5" />
+                  {loading ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      <span>Creating Project…</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Launch Project & Enter Dashboard</span>
+                      <ArrowRight className="h-4 w-4" />
+                    </>
+                  )}
                 </Button>
-              </div>
+              </form>
             </CardContent>
           </Card>
         )}
       </main>
 
-      {/* Footer link */}
+      {/* Footer */}
       <footer className="w-full max-w-4xl text-center py-4 text-xs text-slate-500">
-        Need help? Check out our{' '}
-        <Link href="/docs" className="text-indigo-400 hover:underline">
-          documentation
-        </Link>{' '}
-        or join our community Discord.
+        ShipPulse &bull; The AI communication layer between what you ship and what users care about.
       </footer>
     </div>
   )
