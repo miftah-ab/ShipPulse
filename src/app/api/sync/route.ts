@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     // Find project
     const { data: project, error: pErr } = await serviceDb
       .from('shippulse_projects')
-      .select('id, workspace_id, name, slug, repo_url, default_branch, last_synced_at')
+      .select('id, workspace_id, name, slug')
       .eq('slug', projectSlug)
       .is('deleted_at', null)
       .maybeSingle()
@@ -50,43 +50,77 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
-    if (!project.repo_url) {
+    // Find active repository connection
+    const { data: connection } = await serviceDb
+      .from('shippulse_repository_connections')
+      .select('id, repository_id, branch, is_active')
+      .eq('project_id', project.id)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (!connection || !connection.repository_id) {
       return NextResponse.json({
         error: 'No repository connected. Configure a GitHub repository in the Integrations page first.',
       }, { status: 422 })
     }
 
-    // Get provider token from session
+    const { data: repoRecord } = await serviceDb
+      .from('shippulse_repositories')
+      .select('id, full_name, url, default_branch, last_synced_at')
+      .eq('id', connection.repository_id)
+      .maybeSingle()
+
+    if (!repoRecord || !repoRecord.url) {
+      return NextResponse.json({
+        error: 'Connected repository not found. Please re-connect your repository.',
+      }, { status: 422 })
+    }
+
+    // Get provider token from session or github tokens table
+    let providerToken: string | null | undefined
     const { data: { session } } = await supabase.auth.getSession()
-    const providerToken = session?.provider_token
+    providerToken = session?.provider_token
 
     if (!providerToken) {
-      return NextResponse.json({
-        error: 'GitHub OAuth token missing. Please reconnect your GitHub account.',
-      }, { status: 401 })
+      const { data: tokenRecord } = await serviceDb
+        .from('shippulse_github_tokens')
+        .select('access_token')
+        .eq('workspace_id', project.workspace_id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (tokenRecord?.access_token) {
+        providerToken = tokenRecord.access_token
+      }
     }
 
-    // Parse owner/repo from repo_url
-    const repoMatch = project.repo_url.match(/github\.com\/([^/]+\/[^/]+)/)
-    if (!repoMatch) {
-      return NextResponse.json({ error: 'Invalid repository URL format.' }, { status: 422 })
+    // Parse owner/repo from repo URL or full_name
+    const repoMatch = repoRecord.url.match(/github\.com\/([^/]+\/[^/]+)/)
+    const repoFullName = repoRecord.full_name || (repoMatch ? repoMatch[1].replace(/\.git$/, '') : '')
+    if (!repoFullName) {
+      return NextResponse.json({ error: 'Invalid repository format.' }, { status: 422 })
     }
-    const repoFullName = repoMatch[1].replace(/\.git$/, '')
-    const branch = project.default_branch || 'main'
+    const branch = connection.branch || repoRecord.default_branch || 'main'
 
     // Build `since` param from last sync timestamp
-    const since = project.last_synced_at
-      ? `&since=${encodeURIComponent(project.last_synced_at)}`
+    const since = repoRecord.last_synced_at
+      ? `&since=${encodeURIComponent(repoRecord.last_synced_at)}`
       : ''
+
+    const headers: Record<string, string> = {
+      Accept: 'application/vnd.github.v3+json',
+      'User-Agent': 'ShipPulse/1.0',
+    }
+    if (providerToken) {
+      headers['Authorization'] = `token ${providerToken}`
+    }
 
     const ghRes = await fetch(
       `https://api.github.com/repos/${repoFullName}/commits?sha=${branch}&per_page=50${since}`,
-      {
-        headers: {
-          Authorization: `token ${providerToken}`,
-          Accept: 'application/vnd.github.v3+json',
-        },
-      }
+      { headers }
     )
 
     if (!ghRes.ok) {
@@ -112,11 +146,15 @@ export async function POST(request: NextRequest) {
 
     const analysis = analyzeChanges(rawCommits, [], [])
 
-    // Update last_synced_at timestamp
+    // Update last_synced_at timestamp on repository
     await serviceDb
-      .from('shippulse_projects')
-      .update({ last_synced_at: new Date().toISOString() })
-      .eq('id', project.id)
+      .from('shippulse_repositories')
+      .update({
+        last_synced_at: new Date().toISOString(),
+        sync_status: 'completed',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', repoRecord.id)
 
     return NextResponse.json({
       success: true,

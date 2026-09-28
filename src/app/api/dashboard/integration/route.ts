@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
 
     let { data: project } = await serviceDb
       .from('shippulse_projects')
-      .select('id, workspace_id, repo_url, default_branch, last_synced_at')
+      .select('id, workspace_id, name, slug')
       .eq('slug', projectSlug)
       .is('deleted_at', null)
       .maybeSingle()
@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
     if (!project) {
       const { data: matched } = await serviceDb
         .from('shippulse_projects')
-        .select('id, workspace_id, repo_url, default_branch, last_synced_at')
+        .select('id, workspace_id, name, slug')
         .ilike('slug', `${projectSlug}%`)
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
         const workspaceIds = userMemberships.map((m: any) => m.workspace_id)
         const { data: anyProj } = await serviceDb
           .from('shippulse_projects')
-          .select('id, workspace_id, repo_url, default_branch, last_synced_at')
+          .select('id, workspace_id, name, slug')
           .in('workspace_id', workspaceIds)
           .is('deleted_at', null)
           .order('created_at', { ascending: false })
@@ -59,21 +59,39 @@ export async function GET(request: NextRequest) {
 
     if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
 
-    const hasRepo = !!project.repo_url
+    // Find the active repository connection for this project
+    const { data: connection } = await serviceDb
+      .from('shippulse_repository_connections')
+      .select('id, repository_id, branch, is_active')
+      .eq('project_id', project.id)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
 
-    return NextResponse.json({
-      repo: hasRepo
-        ? {
-            repoUrl: project.repo_url,
-            defaultBranch: project.default_branch || 'main',
-            lastSync: project.last_synced_at
-              ? new Date(project.last_synced_at).toLocaleString()
-              : 'Never',
-          }
-        : null,
-    })
+    let repoData = null
+    if (connection?.repository_id) {
+      const { data: repoRecord } = await serviceDb
+        .from('shippulse_repositories')
+        .select('id, full_name, name, owner, url, default_branch, last_synced_at')
+        .eq('id', connection.repository_id)
+        .maybeSingle()
+
+      if (repoRecord) {
+        repoData = {
+          repoUrl: repoRecord.url,
+          fullName: repoRecord.full_name,
+          defaultBranch: connection.branch || repoRecord.default_branch || 'main',
+          lastSync: repoRecord.last_synced_at
+            ? new Date(repoRecord.last_synced_at).toLocaleString()
+            : 'Never',
+        }
+      }
+    }
+
+    return NextResponse.json({ repo: repoData })
   } catch (err: any) {
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error: ' + (err?.message || '') }, { status: 500 })
   }
 }
 
@@ -94,7 +112,7 @@ export async function PATCH(request: NextRequest) {
 
     let { data: project } = await serviceDb
       .from('shippulse_projects')
-      .select('id, workspace_id, name')
+      .select('id, workspace_id, name, slug')
       .eq('slug', projectSlug)
       .is('deleted_at', null)
       .maybeSingle()
@@ -102,7 +120,7 @@ export async function PATCH(request: NextRequest) {
     if (!project) {
       const { data: matched } = await serviceDb
         .from('shippulse_projects')
-        .select('id, workspace_id, name')
+        .select('id, workspace_id, name, slug')
         .ilike('slug', `${projectSlug}%`)
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
@@ -121,7 +139,7 @@ export async function PATCH(request: NextRequest) {
         const workspaceIds = userMemberships.map((m: any) => m.workspace_id)
         const { data: anyProj } = await serviceDb
           .from('shippulse_projects')
-          .select('id, workspace_id, name')
+          .select('id, workspace_id, name, slug')
           .in('workspace_id', workspaceIds)
           .is('deleted_at', null)
           .order('created_at', { ascending: false })
@@ -145,52 +163,98 @@ export async function PATCH(request: NextRequest) {
     // Normalize repo URL
     const cleanRepoUrl = repoUrl.startsWith('http') ? repoUrl : `https://github.com/${repoUrl.replace(/^\//, '')}`
     const fullName = repoFullName || cleanRepoUrl.replace(/https?:\/\/github\.com\//, '').replace(/\.git$/, '')
+    const repoOwner = fullName.split('/')[0] || 'owner'
+    const repoName = fullName.split('/')[1] || project.name
+    const branch = defaultBranch || 'main'
 
-    const { error } = await serviceDb
-      .from('shippulse_projects')
-      .update({
-        repo_url: cleanRepoUrl,
-        default_branch: defaultBranch || 'main',
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', project.id)
+    // Upsert repository in shippulse_repositories
+    let repoId: string | null = null
+    const { data: existingRepo } = await serviceDb
+      .from('shippulse_repositories')
+      .select('id')
+      .eq('workspace_id', project.workspace_id)
+      .eq('full_name', fullName)
+      .maybeSingle()
 
-    if (error) {
-      return NextResponse.json({ error: 'Failed to save integration: ' + error.message }, { status: 500 })
-    }
-
-    // Upsert repository record
-    try {
-      const { data: repoRecord } = await serviceDb
+    if (existingRepo?.id) {
+      repoId = existingRepo.id
+      await serviceDb
+        .from('shippulse_repositories')
+        .update({
+          url: cleanRepoUrl,
+          default_branch: branch,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', repoId)
+    } else {
+      const numericId = Math.abs(fullName.split('').reduce((acc: number, char: string) => (acc * 31 + char.charCodeAt(0)) | 0, 0)) || Date.now()
+      const { data: repoRecord, error: repoErr } = await serviceDb
         .from('shippulse_repositories')
         .insert({
           workspace_id: project.workspace_id,
-          github_repo_id: Date.now(),
+          github_repo_id: numericId,
           full_name: fullName,
-          name: fullName.split('/')[1] || project.name,
-          owner: fullName.split('/')[0] || 'owner',
+          name: repoName,
+          owner: repoOwner,
           url: cleanRepoUrl,
-          default_branch: defaultBranch || 'main',
+          default_branch: branch,
         })
-        .select()
+        .select('id')
         .single()
 
       if (repoRecord) {
-        await serviceDb
-          .from('shippulse_repository_connections')
-          .upsert({
-            project_id: project.id,
-            repository_id: repoRecord.id,
-            branch: defaultBranch || 'main',
-            is_active: true,
-          }, { onConflict: 'project_id,repository_id' })
+        repoId = repoRecord.id
+      } else {
+        const { data: fallbackRepo } = await serviceDb
+          .from('shippulse_repositories')
+          .select('id')
+          .eq('workspace_id', project.workspace_id)
+          .eq('full_name', fullName)
+          .maybeSingle()
+        if (fallbackRepo?.id) {
+          repoId = fallbackRepo.id
+        } else {
+          return NextResponse.json({ error: 'Failed to create repository record: ' + (repoErr?.message || 'unknown') }, { status: 500 })
+        }
       }
-    } catch (e: any) {
-      console.warn('[Integration] Repo connection warning:', e.message)
     }
 
-    return NextResponse.json({ success: true, repoUrl: cleanRepoUrl, fullName })
+    if (!repoId) {
+      return NextResponse.json({ error: 'Failed to resolve repository record' }, { status: 500 })
+    }
+
+    // Deactivate previous connections for this project and activate this one
+    await serviceDb
+      .from('shippulse_repository_connections')
+      .update({ is_active: false })
+      .eq('project_id', project.id)
+
+    const { error: connError } = await serviceDb
+      .from('shippulse_repository_connections')
+      .upsert({
+        project_id: project.id,
+        repository_id: repoId,
+        branch: branch,
+        is_active: true,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'project_id,repository_id' })
+
+    if (connError) {
+      return NextResponse.json({ error: 'Failed to save integration: ' + connError.message }, { status: 500 })
+    }
+
+    await serviceDb
+      .from('shippulse_projects')
+      .update({ updated_at: new Date().toISOString() })
+      .eq('id', project.id)
+
+    return NextResponse.json({
+      success: true,
+      repoUrl: cleanRepoUrl,
+      fullName,
+      defaultBranch: branch,
+    })
   } catch (err: any) {
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error: ' + (err?.message || '') }, { status: 500 })
   }
 }
