@@ -15,7 +15,8 @@ import {
   Edit3,
   Filter,
   ExternalLink,
-  ChevronRight
+  ChevronRight,
+  GitBranch
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -27,6 +28,7 @@ export default function ReleasesPage() {
   const [filter, setFilter] = useState<'all' | 'published' | 'draft' | 'generated'>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [isSyncing, setIsSyncing] = useState(false)
+  const [syncNotice, setSyncNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [releases, setReleases] = useState<any[]>([])
@@ -69,17 +71,24 @@ export default function ReleasesPage() {
   const triggerAiSync = async () => {
     try {
       setIsSyncing(true)
+      setSyncNotice(null)
       const res = await fetch('/api/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectSlug }),
       })
+      const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        throw new Error('Sync failed')
+        setSyncNotice({ type: 'error', text: data.error || 'Sync failed. Please check your GitHub connection.' })
+      } else {
+        setSyncNotice({
+          type: 'success',
+          text: data.message || `Sync completed. Ingested ${data.commitsIngested ?? 0} commits.`,
+        })
+        await fetchReleases()
       }
-      await fetchReleases()
-    } catch {
-      // Refresh to ensure any partial sync is reflected
+    } catch (err: any) {
+      setSyncNotice({ type: 'error', text: err?.message || 'Network error during sync.' })
       await fetchReleases()
     } finally {
       setIsSyncing(false)
@@ -117,6 +126,32 @@ export default function ReleasesPage() {
           </Link>
         </div>
       </div>
+
+      {/* Sync notification banner */}
+      {syncNotice && (
+        <div
+          className={`p-3.5 rounded-xl border text-xs flex items-center justify-between transition-all ${
+            syncNotice.type === 'success'
+              ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+              : 'bg-amber-500/10 border-amber-500/20 text-amber-300'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {syncNotice.type === 'success' ? (
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+            ) : (
+              <Clock className="h-4 w-4 shrink-0 text-amber-400" />
+            )}
+            <span>{syncNotice.text}</span>
+          </div>
+          <button
+            onClick={() => setSyncNotice(null)}
+            className="text-slate-400 hover:text-white text-xs ml-3"
+          >
+            &times;
+          </button>
+        </div>
+      )}
 
       {/* Filter Tabs & Search */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-b border-slate-800 pb-3">
@@ -223,16 +258,35 @@ export default function ReleasesPage() {
 
           {filteredReleases.length === 0 && (
             <div className="p-12 text-center border border-dashed border-slate-800 rounded-2xl">
-              <Sparkles className="h-8 w-8 text-slate-600 mx-auto mb-3" />
+              <Sparkles className="h-8 w-8 text-indigo-400 mx-auto mb-3" />
               <p className="text-sm font-semibold text-slate-300">No releases found</p>
-              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                Run an AI sync to automatically group your recent commits, or create a release draft manually.
+              <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                Run an AI sync to automatically fetch your recent GitHub commits and draft release notes, or create a release manually.
               </p>
-              <Link href={`/${projectSlug}/releases/new`}>
-                <Button size="sm" variant="glow" className="mt-4">
-                  Create First Release
+              <div className="flex flex-wrap items-center justify-center gap-3 mt-5">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={triggerAiSync}
+                  disabled={isSyncing}
+                  className="h-9 text-xs"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${isSyncing ? 'animate-spin text-indigo-400' : ''}`} />
+                  <span>{isSyncing ? 'Syncing Git Commits...' : 'Run AI Sync Now'}</span>
                 </Button>
-              </Link>
+                <Link href={`/${projectSlug}/releases/new`}>
+                  <Button size="sm" variant="glow" className="h-9 text-xs">
+                    <Plus className="h-3.5 w-3.5 mr-1.5" />
+                    Create Release
+                  </Button>
+                </Link>
+                <Link href={`/${projectSlug}/integrations`}>
+                  <Button size="sm" variant="outline" className="h-9 text-xs border-slate-750 text-slate-400 hover:text-white">
+                    <GitBranch className="h-3.5 w-3.5 mr-1.5" />
+                    Manage Repo
+                  </Button>
+                </Link>
+              </div>
             </div>
           )}
         </div>

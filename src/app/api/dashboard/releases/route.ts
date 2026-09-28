@@ -177,7 +177,7 @@ export async function POST(request: NextRequest) {
       .insert({
         workspace_id: project.workspace_id,
         project_id: project.id,
-        author_id: user.id,
+        created_by: user.id,
         title,
         slug: uniqueSlug,
         version: version || null,

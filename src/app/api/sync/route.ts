@@ -146,6 +146,120 @@ export async function POST(request: NextRequest) {
 
     const analysis = analyzeChanges(rawCommits, [], [])
 
+    // Ingest commits into shippulse_commits table
+    if (rawCommits.length > 0) {
+      try {
+        const commitRows = rawCommits.map((c) => ({
+          repository_id: repoRecord.id,
+          sha: c.sha,
+          message: c.message,
+          author_name: c.authorName,
+          author_date: c.authorDate,
+          url: c.url,
+          is_merge: c.isMerge,
+          branch,
+        }))
+        await serviceDb
+          .from('shippulse_commits')
+          .upsert(commitRows, { onConflict: 'repository_id,sha' })
+      } catch (cErr: any) {
+        console.warn('[Sync] Commit upsert warning:', cErr.message)
+      }
+    }
+
+    // Auto-generate a release draft if commits exist and need publishing
+    let createdRelease = null
+    if (rawCommits.length > 0) {
+      try {
+        const { data: existingReleases } = await serviceDb
+          .from('shippulse_releases')
+          .select('id, version, created_at')
+          .eq('project_id', project.id)
+          .is('deleted_at', null)
+          .order('created_at', { ascending: false })
+
+        const releaseIndex = (existingReleases?.length || 0) + 1
+        const detectedVersion = analysis.detectedVersion || `v1.0.${releaseIndex}`
+
+        const features = rawCommits.filter(c => /feat(ure)?|add|new|implement|introduc/i.test(c.message))
+        const fixes = rawCommits.filter(c => /fix|bug|error|crash|resolve|patch/i.test(c.message))
+        const improvements = rawCommits.filter(c => !features.includes(c) && !fixes.includes(c) && !c.isMerge)
+
+        const primaryHeadline = features[0]?.message.replace(/^feat(\([^)]+\))?:\s*/i, '') ||
+                                improvements[0]?.message.replace(/^(chore|refactor)(\([^)]+\))?:\s*/i, '') ||
+                                fixes[0]?.message.replace(/^fix(\([^)]+\))?:\s*/i, '') ||
+                                'Core Updates & Improvements'
+
+        const releaseTitle = `${detectedVersion} - ${primaryHeadline.charAt(0).toUpperCase() + primaryHeadline.slice(1)}`
+
+        const contentSections: string[] = []
+        if (features.length > 0) {
+          contentSections.push(`### 🚀 New Features\n` + features.map(f => `- ${f.message}`).join('\n'))
+        }
+        if (improvements.length > 0) {
+          contentSections.push(`### 🛠️ Improvements\n` + improvements.slice(0, 10).map(i => `- ${i.message}`).join('\n'))
+        }
+        if (fixes.length > 0) {
+          contentSections.push(`### 🐛 Bug Fixes\n` + fixes.map(f => `- ${f.message}`).join('\n'))
+        }
+        if (contentSections.length === 0) {
+          contentSections.push(rawCommits.slice(0, 10).map(c => `- ${c.message}`).join('\n'))
+        }
+
+        const releaseContent = contentSections.join('\n\n')
+        const releaseSummary = `Synchronized ${rawCommits.length} commits from ${repoFullName} branch ${branch}. Key updates: ${primaryHeadline}.`
+        const releaseSlug = `${detectedVersion.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now().toString(36)}`
+
+        const { data: newRel, error: relErr } = await serviceDb
+          .from('shippulse_releases')
+          .insert({
+            project_id: project.id,
+            workspace_id: project.workspace_id,
+            title: releaseTitle,
+            slug: releaseSlug,
+            version: detectedVersion,
+            summary: releaseSummary,
+            content: releaseContent,
+            status: 'generated',
+            is_ai_generated: true,
+            created_by: user.id,
+            tags: analysis.groups.map(g => g.theme).filter(Boolean).slice(0, 5),
+          })
+          .select()
+          .single()
+
+        if (!relErr && newRel) {
+          createdRelease = newRel
+          const entries = [
+            ...features.map((f, i) => ({
+              release_id: newRel.id,
+              project_id: project.id,
+              title: f.message.replace(/^feat(\([^)]+\))?:\s*/i, ''),
+              description: `Commit ${f.sha} by ${f.authorName}`,
+              is_ai_generated: true,
+              sort_order: i,
+            })),
+            ...fixes.map((f, i) => ({
+              release_id: newRel.id,
+              project_id: project.id,
+              title: f.message.replace(/^fix(\([^)]+\))?:\s*/i, ''),
+              description: `Commit ${f.sha} by ${f.authorName}`,
+              is_ai_generated: true,
+              sort_order: features.length + i,
+            })),
+          ]
+
+          if (entries.length > 0) {
+            await serviceDb.from('shippulse_release_entries').insert(entries)
+          }
+        } else if (relErr) {
+          console.warn('[Sync] Release creation warning:', relErr.message)
+        }
+      } catch (relGenErr: any) {
+        console.warn('[Sync] Release generation error:', relGenErr.message)
+      }
+    }
+
     // Update last_synced_at timestamp on repository
     await serviceDb
       .from('shippulse_repositories')
@@ -160,8 +274,9 @@ export async function POST(request: NextRequest) {
       success: true,
       analysis,
       commitsIngested: rawCommits.length,
+      releaseCreated: createdRelease ? createdRelease.id : null,
       message: rawCommits.length > 0
-        ? `Sync completed. Ingested ${rawCommits.length} new commits from ${repoFullName}.`
+        ? `Sync completed. Ingested ${rawCommits.length} new commits from ${repoFullName}${createdRelease ? ' and created a new release draft.' : '.'}`
         : 'Repository is already up to date. No new commits found.',
     })
   } catch (err: any) {
