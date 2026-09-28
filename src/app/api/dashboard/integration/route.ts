@@ -248,11 +248,26 @@ export async function PATCH(request: NextRequest) {
       .update({ updated_at: new Date().toISOString() })
       .eq('id', project.id)
 
+    // Automatically trigger initial sync to detect commits and generate first release draft
+    let syncSummary = null
+    try {
+      const { runProjectSync } = await import('@/lib/sync/sync-service')
+      syncSummary = await runProjectSync({
+        projectId: project.id,
+        userId: user.id,
+        force: true,
+      })
+    } catch (syncErr: any) {
+      console.warn('[Integration] Auto-sync trigger warning:', syncErr.message)
+    }
+
     return NextResponse.json({
       success: true,
       repoUrl: cleanRepoUrl,
       fullName,
       defaultBranch: branch,
+      autoSynced: syncSummary?.success ?? false,
+      releaseCreated: syncSummary?.releaseCreated ? true : false,
     })
   } catch (err: any) {
     return NextResponse.json({ error: 'Internal server error: ' + (err?.message || '') }, { status: 500 })

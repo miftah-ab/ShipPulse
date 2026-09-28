@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
 
     const serviceDb = createServiceClient()
 
-    // Exact slug match first
+    // 1. Exact slug match first
     let { data: project } = await serviceDb
       .from('shippulse_projects')
       .select('id, name, slug')
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
       .is('deleted_at', null)
       .maybeSingle()
 
-    // Prefix-match fallback (handles slug suffix like "myproject-1k2j3")
+    // 2. Prefix-match fallback (handles slug suffix like "shippulse-xxx")
     if (!project) {
       const { data: matched } = await serviceDb
         .from('shippulse_projects')
@@ -38,16 +38,40 @@ export async function GET(request: NextRequest) {
       project = matched
     }
 
+    // 3. Fallback: match by name or return the latest active project
+    if (!project) {
+      const { data: nameMatched } = await serviceDb
+        .from('shippulse_projects')
+        .select('id, name, slug')
+        .ilike('name', `%${projectSlug}%`)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      project = nameMatched
+    }
+
+    if (!project) {
+      const { data: latestProj } = await serviceDb
+        .from('shippulse_projects')
+        .select('id, name, slug')
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      project = latestProj
+    }
+
     if (!project) {
       return NextResponse.json({
-        projectName: null,
+        projectName: 'ShipPulse',
         slug: projectSlug,
         releases: [],
         error: 'Project not found',
       }, { status: 404 })
     }
 
-    // Fetch published releases first
+    // 4. Fetch published releases first
     let { data: releases } = await serviceDb
       .from('shippulse_releases')
       .select('id, version, title, summary, content, tags, published_at, created_at, views_count, reactions_count')
@@ -57,13 +81,13 @@ export async function GET(request: NextRequest) {
       .order('published_at', { ascending: false })
       .limit(10)
 
-    // If creator has no published ones yet, include drafts/generated so they see real AI-created entries
+    // If no published releases yet, include generated/draft ones so widget & changelog show real updates immediately
     if (!releases || releases.length === 0) {
       const { data: draftReleases } = await serviceDb
         .from('shippulse_releases')
         .select('id, version, title, summary, content, tags, published_at, created_at, views_count, reactions_count')
         .eq('project_id', project.id)
-        .in('status', ['draft', 'generated'])
+        .in('status', ['published', 'generated', 'draft'])
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
         .limit(10)
@@ -73,10 +97,32 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Increment view count (fire and forget)
-    void serviceDb
-      .rpc('increment_changelog_views', { p_project_id: project.id })
-      .then(() => {})
+    // If STILL no releases, check if we can auto-sync commits right now!
+    if (!releases || releases.length === 0) {
+      try {
+        const { runProjectSync } = await import('@/lib/sync/sync-service')
+        const syncRes = await runProjectSync({
+          projectId: project.id,
+          force: true,
+          autoPublish: true,
+        })
+        if (syncRes.success) {
+          const { data: freshReleases } = await serviceDb
+            .from('shippulse_releases')
+            .select('id, version, title, summary, content, tags, published_at, created_at, views_count, reactions_count')
+            .eq('project_id', project.id)
+            .is('deleted_at', null)
+            .order('created_at', { ascending: false })
+            .limit(10)
+
+          if (freshReleases && freshReleases.length > 0) {
+            releases = freshReleases
+          }
+        }
+      } catch (autoErr: any) {
+        console.warn('[Public Changelog] Auto-sync attempt:', autoErr.message)
+      }
+    }
 
     return NextResponse.json({
       projectName: project.name,

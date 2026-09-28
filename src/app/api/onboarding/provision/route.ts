@@ -144,20 +144,32 @@ export async function POST(request: NextRequest) {
           if (repoErr) console.warn('[Provision] Repo insert warning:', repoErr.message)
         }
 
-        if (repoId && project) {
-          await serviceDb
-            .from('shippulse_repository_connections')
-            .insert({
-              project_id: project.id,
-              repository_id: repoId,
-              branch: defaultBranch,
-              is_active: true,
-            })
+          if (repoId && project) {
+            await serviceDb
+              .from('shippulse_repository_connections')
+              .insert({
+                project_id: project.id,
+                repository_id: repoId,
+                branch: defaultBranch,
+                is_active: true,
+              })
+
+            // Automatically detect commits & generate first release draft
+            try {
+              const { runProjectSync } = await import('@/lib/sync/sync-service')
+              await runProjectSync({
+                projectId: project.id,
+                userId: user.id,
+                force: true,
+              })
+            } catch (syncErr: any) {
+              console.warn('[Provision] Auto-sync warning:', syncErr.message)
+            }
+          }
+        } catch (e: any) {
+          console.warn('[Provision] Repo record error:', e)
         }
-      } catch (e: any) {
-        console.warn('[Provision] Repo record error:', e)
       }
-    }
 
     // 5. If initialRelease provided, persist as real draft release
     let createdRelease = null

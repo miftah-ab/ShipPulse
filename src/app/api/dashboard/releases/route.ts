@@ -120,6 +120,48 @@ export async function GET(request: NextRequest) {
       releases = joinedReleases
     }
 
+    // If 0 releases exist, automatically attempt an initial auto-sync if a repository is connected
+    if (!releases || releases.length === 0) {
+      try {
+        const { data: conn } = await serviceDb
+          .from('shippulse_repository_connections')
+          .select('id')
+          .eq('project_id', project.id)
+          .eq('is_active', true)
+          .limit(1)
+          .maybeSingle()
+
+        if (conn) {
+          const { runProjectSync } = await import('@/lib/sync/sync-service')
+          const syncRes = await runProjectSync({
+            projectId: project.id,
+            userId: user.id,
+            force: true,
+          })
+
+          if (syncRes.success) {
+            const { data: freshReleases } = await serviceDb
+              .from('shippulse_releases')
+              .select(`
+                id, title, slug, summary, version, status,
+                published_at, created_at, updated_at, tags,
+                views_count, reactions_count, feedback_count,
+                category_id
+              `)
+              .eq('project_id', project.id)
+              .is('deleted_at', null)
+              .order('created_at', { ascending: false })
+
+            if (freshReleases && freshReleases.length > 0) {
+              releases = freshReleases
+            }
+          }
+        }
+      } catch (autoErr: any) {
+        console.warn('[Dashboard Releases] Auto-sync on load error:', autoErr.message)
+      }
+    }
+
     return NextResponse.json({ releases: releases ?? [] })
   } catch (err: any) {
     console.error('[Dashboard Releases] Error:', err.message)

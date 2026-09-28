@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // POST /api/github/webhook
 // Receives GitHub webhook events, validates signature,
 // enforces idempotency, triggers sync
@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { validateWebhookSignature } from '@/lib/github/service'
 import { createServiceClient } from '@/lib/supabase/server'
 import { checkRateLimit, getIdentifier, RATE_LIMITS } from '@/lib/rate-limit'
+import { runProjectSync } from '@/lib/sync/sync-service'
 
 export async function POST(request: NextRequest) {
   const supabase = createServiceClient()
@@ -154,23 +155,15 @@ async function handlePushEvent(
   const commits = (payload.commits as any[]) ?? []
   if (commits.length === 0) return
 
-  // Get workspace_id
-  const { data: project } = await supabase
-    .from('shippulse_projects')
-    .select('workspace_id')
-    .eq('id', projectId)
-    .single()
-
-  if (!project) return
-
-  // Queue a sync job
-  await supabase.from('shippulse_sync_jobs').insert({
-    project_id: projectId,
-    repository_id: repositoryId,
-    workspace_id: project.workspace_id,
-    status: 'queued',
-    triggered_by: 'webhook',
-  })
+  // Automatically sync commits and generate release draft immediately
+  try {
+    await runProjectSync({
+      projectId,
+      force: false,
+    })
+  } catch (err: any) {
+    console.error('[Webhook Push] Auto-sync failed:', err.message)
+  }
 }
 
 async function handlePullRequestEvent(
@@ -187,21 +180,14 @@ async function handlePullRequestEvent(
   // Only care about merged PRs
   if (action !== 'closed' || !pr?.merged) return
 
-  const { data: project } = await supabase
-    .from('shippulse_projects')
-    .select('workspace_id')
-    .eq('id', projectId)
-    .single()
-
-  if (!project) return
-
-  await supabase.from('shippulse_sync_jobs').insert({
-    project_id: projectId,
-    repository_id: repositoryId,
-    workspace_id: project.workspace_id,
-    status: 'queued',
-    triggered_by: 'webhook',
-  })
+  try {
+    await runProjectSync({
+      projectId,
+      force: true,
+    })
+  } catch (err: any) {
+    console.error('[Webhook PR] Auto-sync failed:', err.message)
+  }
 }
 
 async function handleReleaseEvent(
