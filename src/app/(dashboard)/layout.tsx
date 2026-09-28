@@ -119,7 +119,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </div>
                 <div className="overflow-hidden">
                   <p className="text-xs font-semibold text-white truncate capitalize">{projectSlug}</p>
-                  <p className="text-[10px] text-slate-400 truncate">Production App</p>
+                  <p className="text-[10px] text-slate-400 truncate">Active Product</p>
                 </div>
               </div>
               <ChevronDown className="h-3.5 w-3.5 text-slate-400 shrink-0 ml-1" />

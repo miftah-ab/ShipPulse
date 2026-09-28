@@ -4,12 +4,26 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import crypto from 'crypto'
 import { createServiceClient } from '@/lib/supabase/server'
 import { verifyChapaPayment } from '@/lib/billing/chapa'
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json().catch(() => ({}))
+    const rawText = await request.text()
+    const signature = request.headers.get('x-chapa-signature')
+    const secret = process.env.CHAPA_WEBHOOK_SECRET
+
+    // Verify HMAC signature if secret is configured and header provided
+    if (signature && secret && !secret.includes('placeholder')) {
+      const computedHash = crypto.createHmac('sha256', secret).update(rawText).digest('hex')
+      if (computedHash !== signature) {
+        console.warn('[Chapa Webhook] Invalid signature match')
+        return NextResponse.json({ error: 'Invalid webhook signature' }, { status: 401 })
+      }
+    }
+
+    const body = JSON.parse(rawText || '{}')
     const txRef = body?.tx_ref || body?.data?.tx_ref
 
     if (!txRef) {

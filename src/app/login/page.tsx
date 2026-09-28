@@ -22,6 +22,7 @@ export default function LoginPage() {
         options: {
           redirectTo: `${window.location.origin}/api/auth/callback`,
           scopes: 'read:user user:email repo',
+          queryParams: { prompt: 'consent' },
         },
       })
       if (error) throw error

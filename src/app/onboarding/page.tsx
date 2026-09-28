@@ -37,6 +37,7 @@ export default function OnboardingPage() {
   const [projectName, setProjectName] = useState('')
   const [projectSlug, setProjectSlug] = useState('')
   const [selectedRepo, setSelectedRepo] = useState<any | null>(null)
+  const [directRepoUrl, setDirectRepoUrl] = useState('')
 
   // Status & Progress
   const [provisionPhase, setProvisionPhase] = useState<string | null>(null)
@@ -186,7 +187,7 @@ export default function OnboardingPage() {
         </Link>
         <div className="flex items-center gap-2 text-xs text-slate-400">
           <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
-          <span>Production Ready SaaS</span>
+          <span>Release Notes & Product Updates</span>
         </div>
       </header>
 
@@ -363,6 +364,39 @@ export default function OnboardingPage() {
                     </button>
                   </div>
                 )}
+              </div>
+
+              {/* Direct GitHub URL import */}
+              <div className="pt-3 border-t border-slate-800/80 flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="Or enter any GitHub repo URL (https://github.com/owner/repo)..."
+                  value={directRepoUrl}
+                  onChange={(e) => setDirectRepoUrl(e.target.value)}
+                  className="h-9 w-full rounded-lg border border-slate-800 bg-slate-950 px-3 text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!directRepoUrl.trim() || loading}
+                  onClick={() => {
+                    const cleanUrl = directRepoUrl.trim()
+                    const repoName = cleanUrl.replace(/https?:\/\/github\.com\//, '').replace(/\.git$/, '')
+                    const shortName = repoName.split('/')[1] || repoName
+                    handleImportRepo({
+                      id: Date.now(),
+                      name: shortName,
+                      fullName: repoName,
+                      owner: repoName.split('/')[0] || 'User',
+                      url: cleanUrl,
+                      defaultBranch: 'main',
+                      isPrivate: false,
+                    })
+                  }}
+                  className="h-9 text-xs px-3.5 shrink-0 border-slate-750 hover:bg-slate-850"
+                >
+                  Import URL
+                </Button>
               </div>
             </CardContent>
           </Card>

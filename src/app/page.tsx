@@ -480,7 +480,7 @@ export default function LandingPage() {
             <CardContent className="p-8">
               <div className="mb-4">
                 <h3 className="text-xl font-bold text-white">Pro</h3>
-                <p className="text-xs text-slate-400 mt-1">For growing startups and production SaaS.</p>
+                <p className="text-xs text-slate-400 mt-1">For growing startups and modern software teams.</p>
               </div>
               <div className="my-6">
                 <span className="text-4xl font-extrabold text-white">$29</span>
