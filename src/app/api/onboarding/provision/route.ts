@@ -97,42 +97,60 @@ export async function POST(request: NextRequest) {
         name: projectName,
         slug: finalPSlug,
         is_public: true,
-        repo_url: repoUrl || null,
-        default_branch: repoBranch || 'main',
       })
       .select()
       .single()
 
     if (pErr || !project) {
       console.error('[Provision] Project error:', pErr?.message)
-      return NextResponse.json({ error: 'Failed to provision project' }, { status: 500 })
+      return NextResponse.json({ error: pErr?.message || 'Failed to provision project' }, { status: 500 })
     }
 
     // 4. If repoUrl provided, link git repo integration
     if (repoUrl) {
       try {
         const repoFullName = repoUrl.replace(/https?:\/\/github\.com\//, '').replace(/\.git$/, '')
-        const { data: repoRecord } = await serviceDb
-          .from('shippulse_repositories')
-          .insert({
-            workspace_id: workspace.id,
-            github_repo_id: Date.now(),
-            full_name: repoFullName,
-            name: repoFullName.split('/')[1] || projectName,
-            owner: repoFullName.split('/')[0] || workspace.name,
-            url: repoUrl,
-            default_branch: repoBranch || 'main',
-          })
-          .select()
-          .single()
+        const repoName = repoFullName.split('/')[1] || projectName
+        const repoOwner = repoFullName.split('/')[0] || workspace.name
+        const defaultBranch = repoBranch || 'main'
 
-        if (repoRecord && project) {
+        // Check if repository record already exists
+        let repoId: string | null = null
+        const { data: existingRepo } = await serviceDb
+          .from('shippulse_repositories')
+          .select('id')
+          .eq('workspace_id', workspace.id)
+          .eq('full_name', repoFullName)
+          .maybeSingle()
+
+        if (existingRepo?.id) {
+          repoId = existingRepo.id
+        } else {
+          const { data: repoRecord, error: repoErr } = await serviceDb
+            .from('shippulse_repositories')
+            .insert({
+              workspace_id: workspace.id,
+              github_repo_id: Math.floor(Date.now() / 1000),
+              full_name: repoFullName,
+              name: repoName,
+              owner: repoOwner,
+              url: repoUrl,
+              default_branch: defaultBranch,
+            })
+            .select('id')
+            .single()
+
+          if (repoRecord) repoId = repoRecord.id
+          if (repoErr) console.warn('[Provision] Repo insert warning:', repoErr.message)
+        }
+
+        if (repoId && project) {
           await serviceDb
             .from('shippulse_repository_connections')
             .insert({
               project_id: project.id,
-              repository_id: repoRecord.id,
-              branch: repoBranch || 'main',
+              repository_id: repoId,
+              branch: defaultBranch,
               is_active: true,
             })
         }
